@@ -41,6 +41,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const editor = b.addModule("editor", .{
+        .root_source_file = b.path("src/Editor.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "rlzig", .module = mod },
+        },
+    });
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -79,6 +88,7 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "rlzig", .module = mod },
+                .{ .name = "editor", .module = editor },
             },
         }),
     });
@@ -91,9 +101,10 @@ pub fn build(b: *std.Build) void {
     const raylib = raylib_dep.module("raylib"); // main raylib module
     const raygui = raylib_dep.module("raygui"); // raygui module
     const raylib_artifact = raylib_dep.artifact("raylib"); // raylib C library
-    exe.linkLibrary(raylib_artifact);
-    exe.root_module.addImport("raylib", raylib);
-    exe.root_module.addImport("raygui", raygui);
+    mod.linkLibrary(raylib_artifact);
+    mod.addImport("raylib", raylib);
+    mod.addImport("raygui", raygui);
+    mod.addImport("raygui", raygui);
 
     // This declares intent for the executable to be installed into the
     // install prefix when running `zig build` (i.e. when executing the default
