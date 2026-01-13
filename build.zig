@@ -50,6 +50,15 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const platformer = b.addModule("platformer", .{
+        .root_source_file = b.path("src/Platformer.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "rlzig", .module = mod},
+        },
+    });
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -89,6 +98,7 @@ pub fn build(b: *std.Build) void {
                 // importing modules from different packages).
                 .{ .name = "rlzig", .module = mod },
                 .{ .name = "editor", .module = editor },
+                .{ .name = "platformer", .module = platformer},
             },
         }),
     });
