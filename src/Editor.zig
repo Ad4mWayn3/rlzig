@@ -1,7 +1,12 @@
 const root: type = @import("rlzig");
+const Player = root.Player;
 const std: type = root.std;
 const rl: type = root.rl;
 const rgui = root.rgui;
+
+const Seconds = f32;
+const Self = @This();
+const kInputs = [_]rl.KeyboardKey{ .e, .s, .d, .f };
 
 map: std.ArrayList(rl.Rectangle),
 boxTip: rl.Vector2,
@@ -14,17 +19,12 @@ mode: enum {
 	scroll,
 	build,
 	edit,
-	fn name(self: @This()) []const u8 {
-		return switch (self) {
-			.scroll => "scroll",
-			.build => "build",
-			.edit => "edit",
-		};
-	}
+	fn name(self: @This()) []const u8 { return switch (self) {
+		.scroll => "scroll",
+		.build => "build",
+		.edit => "edit",
+	};}
 },
-const Seconds = f32;
-const Self = @This();
-const kInputs = [_]rl.KeyboardKey{ .e, .s, .d, .f };
 
 pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
 	self.map = try .initCapacity(gpa, 0x40);
@@ -78,11 +78,12 @@ pub fn update(self: *Self, gpa: std.mem.Allocator, delta: Seconds) !void {
 	}
 }
 
-pub fn draw(self: *Self) !void {
+pub fn draw(self: *Self, player: *Player) !void {
 	rl.beginMode2D(self.camera);
 	for (self.map.items) |rec| {
 		rl.drawRectangleRec(rec, .blue);
 	}
+	rl.drawRectangleRec(player.rectangle(), .white);
 	// the outlines are drawn in a separate loop to ensure they're on top
 	// of every solid rectangle. this involves a bit of overhead because of
 	// the need to run over the array twice.
