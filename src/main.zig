@@ -10,7 +10,12 @@ var editor: Editor = undefined;
 var platformer: Platformer = undefined;
 var printBuffer: [0x200]u8 = undefined;
 
+const file: std.fs.File = undefined;
+
 pub fn main() !void {
+    file = try std.fs.cwd().openFile("physics.zon", .{.mode = .read_only});
+    defer file.close();
+    file.read(&printBuffer);
     try editor.init(allocator);
     defer editor.deinit(allocator);
     platformer.init(editor.map.items, &printBuffer);
