@@ -15,7 +15,7 @@ const Collision = struct {
 
 const InputName = enum(u4) {
 	up = 0, down, left, right,
-	jump
+	jump, duck,
 };
 
 const InputMap = struct {
@@ -33,14 +33,20 @@ var inputMap = InputMap{ .parent = .new(&.{
 	.{.left, .{.keyboard = .s}},
 	.{.right, .{.keyboard = .f}},
 	.{.jump, .{.keyboard = .space}},
+	.{.duck, .{.keyboard = .z}},
 }) };
 
 /// Physics constants:
-const gravity = 2000.0;
-const hAccel = 2000.0;
-const maxHVel = 400.0;
-const jumpImpulse = 600.0;
-const minSpeedThreshold = 1e-4;
+const Physics = struct {
+	const Float = f64;
+	gravity: Float = 2000.0,
+	hAccel: Float = 2000.0,
+	maxHVel: Float = 400.0,
+	jumpImpulse: Float = 600.0,
+	minSpeedThreshold: Float = 1e-4,
+};
+
+var physics: Physics = {};
 
 map: []rl.Rectangle,
 player: Player,
@@ -64,7 +70,9 @@ pub fn init(self: *Self, map: []rl.Rectangle, printBuffer: []u8) void {
 		.x = 0, .y = 0,
 		.size = .{.x = 25, .y = 50},
 		.vel = .{.x = 0, .y = 0},
+		.orientation = .vertical,
 	};
+	std.debug.assert(self.player.x <= self.player.y);
 	self.camera = .{
 		.target = .{.x = 0, .y = 0},
 		.offset = .{.x = 0, .y = 0},
@@ -80,17 +88,21 @@ fn increaseHoldTime(self: *Self, input: InputName, time: Seconds) void {
 pub fn update(self: *Self, delta: Seconds) void {
 	var hmove = true;
 	if (inputMap.is(.down, .right)) {
-		self.player.vel.x += hAccel * delta;
+		self.player.vel.x += physics.hAccel * delta;
 		self.movingOppositeH = self.player.vel.x < 0.0;
 	} else if (inputMap.is(.down, .left)) {
-		self.player.vel.x -= hAccel * delta;
+		self.player.vel.x -= physics.hAccel * delta;
 		self.movingOppositeH = self.player.vel.x > 0.0;
 	} else hmove = false;
+
+	self.player.orientation = if (inputMap.is(.down, .duck))
+		.horizontal else .vertical;
 	
 	if (inputMap.is(.pressed, .jump) and self.collision.onGround) {
-		self.player.vel.y = -jumpImpulse;
+		self.player.vel.y = -physics.jumpImpulse;
 	}
-	self.player.vel.x = rmath.clamp(self.player.vel.x, -maxHVel, maxHVel);
+	self.player.vel.x = rmath.clamp(self.player.vel.x, -physics.maxHVel,
+		physics.maxHVel);
 	// self.player.
 	self.rmd = self.rmd.add(self.player.vel.scale(delta));
 	const vel = @Vector(2,i32){
@@ -107,12 +119,12 @@ pub fn update(self: *Self, delta: Seconds) void {
 		self.player.vel.y = 0.0;
 	} else if (!collidingMany(&self.player.shifted(.{.x = 0, .y = 1}),
 	self.map)) {
-		self.player.vel.y += gravity * delta;
+		self.player.vel.y += physics.gravity * delta;
 	} else self.collision.onGround = true;
 
 	if ((self.movingOppositeH or !hmove) and self.collision.onGround) blk: {
 		self.movingOppositeT += delta;
-		if (@abs(self.player.vel.x) < minSpeedThreshold) {
+		if (@abs(self.player.vel.x) < physics.minSpeedThreshold) {
 			self.player.vel.x = 0.0;
 			break :blk;
 		}

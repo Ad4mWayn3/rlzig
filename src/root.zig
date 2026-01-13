@@ -32,6 +32,7 @@ pub const Player = struct {
 	x: f32, y: f32,
 	vel: rl.Vector2,
 	size: rl.Vector2,
+    orientation: enum {horizontal, vertical},
 
 	pub fn shifted(self: *const @This(), v: rl.Vector2) @This() {
 		return .{
@@ -39,15 +40,24 @@ pub const Player = struct {
 			.vel = self.vel,
 			.x = self.x + v.x,
 			.y = self.y + v.y,
+            .orientation = self.orientation,
 		};
 	}
 
-	pub fn rectangle(self: *const @This()) rl.Rectangle { return .{
-		.x = self.x,
-		.y = self.y,
-		.width = self.size.x,
-		.height = self.size.y,
-	};}
+	pub fn rectangle(self: *const @This()) rl.Rectangle {
+        var x, var y, var w, var h = .{self.x, self.y,
+            self.size.x, self.size.y};
+        if (self.orientation == .horizontal) {
+            x, y = .{x - (h-w)/2.0, y + (h-w)/2.0};
+            std.mem.swap(f32, &w, &h);
+        }
+        return .{
+            .x = x,
+            .y = y,
+            .width = w,
+            .height = h,
+        };
+    }
 
 	pub fn pos(self: *@This()) rl.Vector2 { return .{.x = self.x, .y = self.y}; }
 };
