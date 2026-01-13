@@ -9,6 +9,8 @@ struct Slice {
 	T* ptr;
 	size_t len;
 };
+extern constexpr unsigned long long int x = 32;
+constexpr float y = 10.f*.01f*.01f*.01f*.01f*.01f*.01f;
 
 void merge(int* out, int* xs, size_t l1, int* ys, size_t l2) {
 	for (size_t i=0, j=0;;) {
