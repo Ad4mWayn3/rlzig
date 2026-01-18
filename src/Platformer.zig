@@ -38,7 +38,7 @@ var inputMap = InputMap{ .parent = .new(&.{
 
 /// Physics constants:
 const Physics = struct {
-	const Float = f64;
+	const Float = f32;
 	gravity: Float = 2000.0,
 	hAccel: Float = 2000.0,
 	maxHVel: Float = 400.0,
@@ -46,7 +46,7 @@ const Physics = struct {
 	minSpeedThreshold: Float = 1e-4,
 };
 
-var physics: Physics = {};
+var physics: Physics = .{};
 
 map: []rl.Rectangle,
 player: Player,
@@ -103,7 +103,7 @@ pub fn update(self: *Self, delta: Seconds) void {
 	}
 	self.player.vel.x = rmath.clamp(self.player.vel.x, -physics.maxHVel,
 		physics.maxHVel);
-	// self.player.
+
 	self.rmd = self.rmd.add(self.player.vel.scale(delta));
 	const vel = @Vector(2,i32){
 		@intFromFloat(std.math.sign(self.rmd.x)*@floor(@abs(self.rmd.x))),
@@ -186,6 +186,9 @@ fn moveAxis(map: anytype, obj: anytype, collision: *bool, vel: i32,
 	const steps: usize = @abs(vel);
 	for (0..steps) |i| {
 		axis.* += step;
+
+		// very expensive operation, checking collisions against every object
+		// every frame hurts efficiency in the long run.
 		if (collidingMany(obj, map)) {
 			axis.* -= step;
 			collision.* = true;
@@ -196,9 +199,87 @@ fn moveAxis(map: anytype, obj: anytype, collision: *bool, vel: i32,
 	return steps;
 }
 
+fn recCenter(r: rl.Rectangle) rl.Vector2 {
+	return .{.x = r.x + r.width/2.0, .y = r.y + r.height/2.0};
+}
+
+fn fastMove(map: []rl.Rectangle, player: *Player, vel: rl.Vector2) Collision {
+	player.x += vel.x;
+	player.y += vel.y;
+	var out: Collision = .{.horizontal=false,.vertical=false,.onGround=false};
+	for (map) |rec| if (rl.checkCollisionRecs(rec, player.rectangle())) {
+		const prec = player.rectangle();
+		const xint = rlzig.intersection(f32,
+			.{rec.x, rec.x+rec.width},
+			.{prec.x, prec.x+prec.width});
+		const yint = rlzig.intersection(f32,
+			.{rec.y, rec.y+rec.height},
+			.{prec.y, prec.y+prec.height});
+		std.debug.assert(xint > 0.0 and yint > 0.0); // maybe >= ?
+		std.debug.assert(@min(xint,yint)+@max(xint,yint) == xint+yint);
+		if (@min(xint,yint) == xint) out.vertical = true
+		else out.horizontal = true;
+
+		// var vec = recCenter(rec).subtract(recCenter(prec)).normalize();
+		// vec.x *= xint;
+
+	} ;
+	return out;
+}
+
+fn _move(map: []rl.Rectangle, player: *Player, collision: *bool,
+	vel: rl.Vector2,
+) void {
+	var newvel = vel;
+	for (map) |rec| {
+		if (willCollideWith(rec, player.rectangle(), newvel)) {
+			collision.* = true;
+			newvel = maxNonCollidingMotion(player.rectangle,rec,newvel);
+		}
+	}
+	std.debug.assert(blk: {
+		for (map) |rec| if (willCollideWith(player.rectangle, rec, newvel))
+			break :blk false;
+		break :blk true;
+	});
+	player.x += newvel.x;
+	player.y += newvel.y;
+}
+
 fn collidingMany(movable: anytype, solids: anytype) bool {
 	for (solids) |solid| if (colliding(movable, solid)) return true;
 	return false;
+}
+
+fn willCollideWith(a: rl.Rectangle, b: rl.Rectangle, v: rl.Vector2) bool {
+	const xs, const ys = .{rlzig.recPoints(a), rlzig.recPoints(b)};
+	const vP = (rl.Vector2 {.x = -v.y, .y = v.x}).normalize();
+	return rlzig.checkCollisionAxes(&xs, &ys, &.{vP,
+		.{.x=1,.y=0}, .{.x=0,.y=1}});
+}
+
+/// Given rectangles `a` and `b`, if `a` moves along `v` in 1 unit of time
+/// returns the time it takes for `a` to touch `b`
+fn maxNonCollidingMotion(a: rl.Rectangle, b: rl.Rectangle, v: rl.Vector2
+) rl.Vector2 {
+	std.debug.assert(willCollideWith(a,b,v));
+	const axm, const axM = .{a.x, a.x+a.width};
+	const aym, const ayM = .{a.y, a.y+a.height};
+	const bxm, const bxM = .{b.x, b.x+b.width};
+	const bym, const byM = .{b.y, b.y+b.height};
+	// am_i + t*v_i = bM_i
+	// t = (bM_i - am_i)/v_i
+	var tx = (bxM - axm)/v.x;
+	std.debug.assert(tx <= 1.0);
+	if (tx < 0.0)
+		tx = (bxm - axM)/v.x;
+
+	var ty = (byM - aym)/v.y;
+	std.debug.assert(ty <= 1.0);
+	if (ty < 0.0)
+		ty = (bym - ayM)/v.y;
+
+	return v.scale(@max(tx,ty));
 }
 
 fn colliding(movable: anytype, solid: anytype

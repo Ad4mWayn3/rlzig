@@ -119,6 +119,66 @@ pub fn translate(comptime T: type, v: rl.Vector2, x: T) T {
     return x_new;
 }
 
+/// returns the upper left, upper right, lower left and lower right points of
+/// `rec` respectively.
+pub fn recPoints(rec: rl.Rectangle) [4]rl.Vector2 {
+    const x, const y, const w, const h = .{rec.x, rec.y, rec.width, rec.height};
+    return .{.{.x=x,.y=y},.{.x=x+w,.y=y},.{.x=x,.y=y+h},.{.x=x+w,.y=y+h}};
+}
+
+/// Amount of intersection between two intervals. Negative if none. Asserts
+/// that the lower bound is strictly smaller than the upper bound for both
+/// intervals.
+pub fn intersection(Num: type,
+    x: struct{Num,Num},
+    y: struct{Num,Num},
+) f32 {
+    std.debug.assert(x[0] < x[1] and y[0] < y[1]);
+    return @min(x[1],y[1]) - @max(x[0],y[0]);
+}
+
+pub fn collisionDepthAxis(xs: []rl.Vector2, ys: []rl.Vector2,
+    axis: rl.Vector2
+) f32 {
+    const dot = .{xs[0].dotProduct(axis), ys[0].dotProduct(axis)};
+    var x = .{.min = dot[0], .max = dot[0]};
+    var y = .{.min = dot[1], .max = dot[1]};
+    for (0..@max(xs.len,ys.len)) |i| {
+        if (i<xs.len) {
+            if (xs[i] < x.min) x.min = xs[i]
+            else if (xs[i] > x.max) x.max = xs[i];
+        }
+        if (i<ys.len) {
+            if (ys[i] < y.min) y.min = ys[i]
+            else if (ys[i] > y.max) y.max = ys[i];
+        }
+    }
+    return intersection(f32,.{x.min,x.max},.{y.min,y.max});
+}
+
+/// Finds the axis with least collision depth in `axes`, stores it to `minAxis`
+/// and returns the depth. Negative depth means the stored `minAxis` is a
+/// separating axis, and the polygons aren't colliding. May not be sufficient
+/// for accurate collision checking if not enough `axes` are provided or either
+/// `xs` or `ys` are non-convex.
+pub fn minCollisionDepthAxes(xs: []rl.Vector2, ys: []rl.Vector2,
+    axes: []rl.Vector2, minAxis: *rl.Vector2
+) f32 {
+    std.debug.assert(xs.len*ys.len*axes.len != 0); // no empty arrays
+    var minDepth = std.math.floatMax(f32);
+    for (axes) |axis| {
+        std.debug.assert(@abs(axis.length()-1.0) < 1e-5);
+        const depth = collisionDepthAxis(xs, ys, axis);
+        if (depth < minDepth) {
+            minDepth = depth;
+            minAxis.* = axis;
+        }
+        if (depth < 0.0)
+            return depth;
+    }
+    return minDepth;
+}
+
 pub fn saveRectsToFile(path: []const u8, recs: []rl.Rectangle) !void {
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
