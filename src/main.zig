@@ -10,19 +10,14 @@ var editor: Editor = undefined;
 var platformer: Platformer = undefined;
 var printBuffer: [0x200]u8 = undefined;
 
-const file: std.fs.File = undefined;
-
 pub fn main() !void {
-    file = try std.fs.cwd().openFile("physics.zon", .{.mode = .read_only});
-    defer file.close();
-    file.read(&printBuffer);
     try editor.init(allocator);
     defer editor.deinit(allocator);
     platformer.init(editor.map.items, &printBuffer);
 
     rl.setTraceLogLevel(.warning);
     rl.setExitKey(.null);
-    rl.setTargetFPS(60);
+    //rl.setTargetFPS(60);
     rl.initWindow(800, 600, "rlzig!");
     defer rl.closeWindow();
     rl.setWindowPosition(80,80);
@@ -45,6 +40,7 @@ pub fn main() !void {
         }
         rl.clearBackground(.black);
         rl.beginDrawing();
+        rl.drawFPS(30,400);
         if (mode == .editor) try editor.draw(&platformer.player)
         else platformer.draw();
         rl.endDrawing();

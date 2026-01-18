@@ -163,6 +163,7 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 	}
 
 	const selCount: usize = self.selected.bit_length;
+	std.debug.assert(selCount <= self.map.items.len);
 	if (rl.isKeyPressed(.delete)) {
 		var indexes = try std.ArrayList(usize).initCapacity(gpa, self.map.items.len);
 		defer indexes.deinit(gpa);
