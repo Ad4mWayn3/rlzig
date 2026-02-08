@@ -32,6 +32,7 @@ pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
 	self.mode = .scroll;
 	self.camera = .{ .offset = .{ .x = 0, .y = 0 }, .rotation = 0, .target = .{ .x = 0, .y = 0 }, .zoom = 1 };
 	try root.loadRectsFromFile("map.bin", gpa, &self.map);
+	try self.selected.resize(gpa, self.map.items.len, false);
 }
 
 pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
@@ -162,22 +163,22 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 		self.selectorTail = self.selectorTip;
 	}
 
-	const selCount: usize = self.selected.bit_length;
-	std.debug.assert(selCount <= self.map.items.len);
+	const bitLen: usize = self.selected.bit_length;
+	std.debug.assert(bitLen == self.map.items.len);
 	if (rl.isKeyPressed(.delete)) {
 		var indexes = try std.ArrayList(usize).initCapacity(gpa, self.map.items.len);
 		defer indexes.deinit(gpa);
-		for (0..selCount) |i| if (self.selected.isSet(i)) {
+		for (0..bitLen) |i| if (self.selected.isSet(i)) {
 			try indexes.append(gpa, i);
 			self.selected.unset(i);
 		};
 		self.map.orderedRemoveMany(indexes.items);
-		const newlen = @as(i64, @intCast(selCount))
+		const newlen = @as(i64, @intCast(bitLen))
 			- @as(i64,@intCast(indexes.items.len));
 		if (newlen < 0) unreachable;
 		try self.selected.resize(gpa, @as(usize,@intCast(newlen)), false);
 	} else if (rl.isKeyDown(.z)) {
-		for (0..selCount) |i| l: {
+		for (0..bitLen) |i| l: {
 			if (!self.selected.isSet(i)) break :l;
 			self.map.items[i].x += mouseDelta.x;
 			self.map.items[i].y += mouseDelta.y;
@@ -185,8 +186,8 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 	} else if (rl.isKeyPressed(.c)) {
 		const count = self.selected.count();
 		try self.map.ensureTotalCapacity(gpa, self.map.items.len + count);
-		try self.selected.resize(gpa, selCount + count, true);
-		for (0..selCount) |i| {
+		try self.selected.resize(gpa, bitLen + count, true);
+		for (0..bitLen) |i| {
 			if (!self.selected.isSet(i)) continue;
 			try self.map.append(gpa, root.translate(rl.Rectangle,
 				.{.x = 10, .y = 10}, self.map.items[i]));
