@@ -34,7 +34,17 @@ pub const Player = struct {
 	size: rl.Vector2,
     orientation: enum {horizontal, vertical},
 
-	pub fn shifted(self: *const @This(), v: rl.Vector2) @This() {
+    /// Max distance the player hitbox shall be shifted for certain edge cases
+    pub fn maxFixShiftLength(self: @This()) f32 {
+        const min, const max = minMax(self.size.x, self.size.y);
+
+        // if a rectangle R is a 90 degree rotation of another rectangle T
+        // around T's center, this is the distance between R and T's corners
+        // along either the x or y axis.
+        return (max - min) / 2;
+    }
+
+	pub fn shifted(self: @This(), v: rl.Vector2) @This() {
 		return .{
 			.size = self.size,
 			.vel = self.vel,
@@ -42,9 +52,24 @@ pub const Player = struct {
 			.y = self.y + v.y,
             .orientation = self.orientation,
 		};
+        
 	}
 
-	pub fn rectangle(self: *const @This()) rl.Rectangle {
+    pub fn fixRotateCollision(self: *@This(), rec: rl.Rectangle) void {
+        const prec = self.rectangle();
+        const colliding = rl.checkCollisionRecs;
+        std.debug.assert(colliding(prec, rec));
+        switch (self.orientation) {
+        .horizontal => {
+            
+        },
+        .vertical => {
+
+        },
+        }
+    }
+
+	pub fn rectangle(self: @This()) rl.Rectangle {
         var x, var y, var w, var h = .{self.x, self.y,
             self.size.x, self.size.y};
         if (self.orientation == .horizontal) {
@@ -62,7 +87,8 @@ pub const Player = struct {
 	pub fn pos(self: *@This()) rl.Vector2 { return .{.x = self.x, .y = self.y}; }
 };
 
-pub fn EnumMap(EnumKey: type, Value: type) type { return struct {
+pub fn EnumMap(EnumKey: type, Value: type) type {
+    return struct {
     pub const count = @typeInfo(EnumKey).@"enum".fields.len;
     const Self = @This();
     pub const Pair = struct {EnumKey, Value};
@@ -81,10 +107,12 @@ pub fn EnumMap(EnumKey: type, Value: type) type { return struct {
     pub fn @"&"(self: *Self, key: EnumKey) *Value {
         return &self.values[@intFromEnum(key)];
     }
-};}
+    };
+}
 
 pub inline fn isInRectangle(rec: rl.Rectangle, v: rl.Vector2) bool {
-    return v.x >= rec.x and v.x <= rec.x + rec.width and v.y >= rec.y and v.y <= rec.y + rec.height;
+    return v.x >= rec.x and v.x <= rec.x + rec.width and v.y >= rec.y
+        and v.y <= rec.y + rec.height;
 }
 
 pub inline fn rectangleV(v: rl.Vector2, u: rl.Vector2) rl.Rectangle {
@@ -97,7 +125,8 @@ pub inline fn rectangleV(v: rl.Vector2, u: rl.Vector2) rl.Rectangle {
 }
 
 pub inline fn rectangleTipTail(v: rl.Vector2, u: rl.Vector2) rl.Rectangle {
-    return rl.Rectangle{ .x = @min(v.x, u.x), .y = @min(v.y, u.y), .width = @abs(u.x - v.x), .height = @abs(u.y - v.y) };
+    return rl.Rectangle{ .x = @min(v.x, u.x), .y = @min(v.y, u.y),
+        .width = @abs(u.x - v.x), .height = @abs(u.y - v.y) };
 }
 
 pub fn screenV() rl.Vector2 { return .{
@@ -130,11 +159,37 @@ pub fn recPoints(rec: rl.Rectangle) [4]rl.Vector2 {
 /// that the lower bound is strictly smaller than the upper bound for both
 /// intervals.
 pub fn intersection(Num: type,
-    x: struct{Num,Num},
-    y: struct{Num,Num},
-) f32 {
+    x: struct{Num,Num}, y: struct{Num,Num},
+) Num {
     std.debug.assert(x[0] < x[1] and y[0] < y[1]);
     return @min(x[1],y[1]) - @max(x[0],y[0]);
+}
+
+/// Returns a vector measuring how much two rectangles intersect in each axis.
+/// If either dimension is negative, it means there is no intersection. Asserts
+/// that both rectangles have positive widths and heights
+fn recIntersection(r1: rl.Rectangle, r2: rl.Rectangle) rl.Vector2 {
+    std.debug.assert(@min(r1.width, r1.height, r2.width, r2.height) > 0.0);
+    return .{
+        .x = intersection(f32, .{r1.x, r1.x+r1.width}, .{r2.x, r2.x+r2.width}),
+        .y = intersection(f32, .{r1.y, r1.y+r1.height}, .{r2.y, r2.y+r2.height}),
+    };
+}
+
+pub fn fixCollisionRecs(r1: *rl.Rectangle, r2: rl.Rectangle) void {
+    const depth = recIntersection(r1.*,r2);
+    std.debug.assert(@min(depth.x, depth.y) > 0.0);
+    if (depth.x < depth.y) {
+        const diff = r2.x - r1.x;
+        var sign = std.math.sign(diff);
+        if (sign == 0) sign = 1;
+        r1.x -= sign * @abs(depth.x);
+    } else {
+        const diff = r2.y - r1.y;
+        var sign = std.math.sign(diff);
+        if (sign == 0) sign = 1;
+        r1.y -= sign * @abs(depth.y);
+    }
 }
 
 pub fn collisionDepthAxis(xs: []rl.Vector2, ys: []rl.Vector2,
@@ -179,6 +234,39 @@ pub fn minCollisionDepthAxes(xs: []rl.Vector2, ys: []rl.Vector2,
     return minDepth;
 }
 
+/// Loads the file in `path` into the provided buffer. Asserts that
+/// `buf` is at least big enough to store the full file.
+pub fn loadFileStatic(path: []const u8, buf: []u8, nullTerminator: bool) !void {
+    const file = try std.fs.cwd().openFile(path, .{.mode=.read_only});
+    defer file.close();
+    const eof = try file.getEndPos();
+    std.debug.assert(buf.len >= if (!nullTerminator) eof else eof + 1
+        // buffer should be able to hold at least as many bytes as the file size
+    );
+    _ = try file.read(buf[0..eof]);
+    if (nullTerminator) {
+        buf[eof] = 0;
+    }
+}
+
+/// Returns a heap-allocated buffer with the contents of the file. Delegates
+/// deallocation responsibility to the caller
+pub fn loadFileDynamic(gpa: std.mem.Allocator, path: []const u8,
+    nullTerminator: bool
+) ![]u8 {
+    const file = try std.fs.cwd().openFile(path, .{.mode=.read_only});
+    defer file.close();
+    const sz = (try file.getEndPos()) + @as(u64,if (nullTerminator) 1 else 0);
+    std.debug.print("file size: {d}\n", .{sz});
+    const buf = try gpa.alloc(u8, sz);
+    errdefer gpa.free(buf);
+    _ = try file.read(buf);
+    if (nullTerminator) {
+        buf[sz-1] = 0;
+    }
+    return buf;
+}
+
 pub fn saveRectsToFile(path: []const u8, recs: []rl.Rectangle) !void {
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
@@ -193,8 +281,18 @@ pub fn saveRectsToFile(path: []const u8, recs: []rl.Rectangle) !void {
 pub fn loadRectsFromFile(path: []const u8, gpa: std.mem.Allocator,
     recs: *std.ArrayList(rl.Rectangle)
 ) !void {
-    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    const dir = std.fs.cwd();
+    const file = dir.openFile(path, .{ .mode = .read_only })
+        catch try dir.createFile(path, .{.read = true});
     defer file.close();
+
+    // if ran in debug mode, the map may be loaded from a different directory,
+    // these lines are for knowing the current working directory in such
+    // circumstances:
+    // var pathbuf: [0x80]u8 = undefined;
+    // const fullpath = try dir.realpath(path, &pathbuf);
+    // std.debug.print("{s}\n", .{fullpath});
+
     const stride: usize = @sizeOf([4]f32);
     comptime std.debug.assert(@sizeOf(rl.Rectangle) == stride);
 
@@ -207,4 +305,8 @@ pub fn loadRectsFromFile(path: []const u8, gpa: std.mem.Allocator,
         try recs.append(gpa, @bitCast(recb));
         try file.seekTo(i);
     }
+}
+
+pub fn minMax(x: anytype, y: anytype) struct{@TypeOf(x), @TypeOf(x)} {
+    return if (x < y) .{x,y} else .{y,x};
 }
