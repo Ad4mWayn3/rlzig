@@ -53,6 +53,7 @@ map: []rl.Rectangle,
 gpa: std.mem.Allocator,
 player: Player,
 camera: rl.Camera2D,
+deadzone: rl.Rectangle,
 rmd: rl.Vector2,
 collision: Collision,
 printBuffer: []u8,
@@ -76,17 +77,19 @@ pub fn init(self: *Self, allocator: std.mem.Allocator,
         .onGround = false };
     self.player = .{
         .x = 0, .y = 0,
-        .size = .{.x = 25, .y = 50},
+        .size = .{.x = 26, .y = 52},
         .vel = .{.x = 0, .y = 0},
         .orientation = .vertical,
     };
     std.debug.assert(self.player.x <= self.player.y);
+    self.deadzone = .{.x=-200,.y=-200,.width=400,.height=400};
     self.camera = .{
         .target = .{.x = 0, .y = 0},
-        .offset = .{.x = 0, .y = 0},
+        .offset = rlzig.screenV().scale(0.5),
         .rotation = 0.0,
         .zoom = 1.0,
     };
+    self.camFollow(0.3);
 }
 
 fn increaseHoldTime(self: *Self, input: InputName, time: Seconds) void {
@@ -117,9 +120,8 @@ pub fn update(self: *Self, delta: Seconds) !void {
         const isColliding = rl.checkCollisionRecs;
         const initPos = self.player.pos();
         var steps: u32 = 0;
-        var maxSteps: u32 = @intFromFloat(self.player.maxFixShiftLength());
-        maxSteps *= 5;
-
+        const maxSteps: u32 = @intFromFloat(self.player.maxFixShiftLength());
+        //maxSteps *= 5;
 
         var collisionFound = false;
         for (self.map) |rec| blk: {
@@ -142,6 +144,12 @@ pub fn update(self: *Self, delta: Seconds) !void {
     //else 
     if (inputMap.is(.down, .duck) and self.player.orientation == .vertical) {
         self.player.orientation = .horizontal;
+
+        if (self.collision.onGround) {
+            const w: f32, const h: f32 = .{self.player.size.x, self.player.size.y};
+            self.player.y += (h-w) / 2.0;
+        }
+
         if (collidingMany(self.player.rectangle(), self.map))
             self.player.orientation = .vertical;
     } 
@@ -196,22 +204,31 @@ pub fn update(self: *Self, delta: Seconds) !void {
 
     if (self.collision.horizontal)
         self.player.vel.x = 0.0;
-    self.camera.target =  self.player.pos().add(self.player.size.scale(0.5)).
-        subtract(rlzig.screenV().scale(0.5));
+    
+    // self.camera.target =  self.player.pos().add(self.player.size.scale(0.5)).
+    //     subtract(rlzig.screenV().scale(0.5));
+    self.camFollow(delta);
+
 }
 
-pub fn draw(self: *Self) void {
+pub fn draw(self: Self) void {
     rl.beginMode2D(self.camera);
-    for (self.map) |rec| rl.drawRectangleRec(rec, .blue);
-    rl.drawRectangleRec(self.player.rectangle(), .white);
+    //rl.drawRectangleLinesEx(self.deadzone, 4.0, .red);
+    for (self.map) |rec| rl.drawRectangleRec(rec, .{.r = 0, .g = 100, .b = 243, .a = 255});
+    self.player.draw();
     rl.endMode2D();
-    const printed = std.fmt.bufPrint(self.printBuffer,
+    const printed = std.fmt.bufPrint(self.printBuffer,  
         "on ground: {s}\x00",
         .{if (self.collision.onGround) "true" else "false"}
     ) catch unreachable;
     std.debug.assert(printed[printed.len-1] == 0);
     rl.drawText(printed[0.. printed.len-1 :0], 30,30, 21, .white);
     rlzig.drawVecCentered(3.0, .light_gray, self.player.vel.scale(1.0/10.0));
+}
+
+pub fn camFollow(self: *Self, delta: Seconds) void {
+    rlzig.DeadzoneCamera2D.follow(.{.cam=&self.camera, .deadzone = &self.deadzone},
+        self.player.center(), delta);
 }
 
 /// Moves `obj` in integer steps along two axes, if collisions are found,
