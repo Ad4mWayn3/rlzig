@@ -1,0 +1,8 @@
+.{
+	.{.{.keyboard = .j}, .jump},
+	.{.{.keyboard = .k}, .duck},
+	.{.{.keyboard = .e}, .up},
+	.{.{.keyboard = .d}, .down},
+	.{.{.keyboard = .s}, .left},
+	.{.{.keyboard = .f}, .right},
+}
