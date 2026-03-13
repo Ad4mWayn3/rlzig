@@ -28,6 +28,24 @@ pub const Input = union(InputTag) {
 	};}
 };
 
+pub const DeadzoneCamera2D = struct {
+    cam: *rl.Camera2D,
+    deadzone: *rl.Rectangle,
+
+    /// smoothly slides towards `p` if it lies outside of the deadzone
+    pub fn follow(self: @This(), p: rl.Vector2, delta: f32) void {
+        if (!rl.checkCollisionPointRec(p, self.deadzone.*)) {
+            const v = recVecMTV(p, self.deadzone.*).scale(delta*8.0);
+            self.deadzone.x += v.x;
+            self.deadzone.y += v.y;
+            self.cam.target = rl.Vector2.init(self.deadzone.x, self.deadzone.y)
+                .add(rl.Vector2.init(self.deadzone.width,self.deadzone.height)
+                    .scale(0.5)
+                );
+        }
+    }
+};
+
 pub const Player = struct {
 	x: f32, y: f32,
 	vel: rl.Vector2,
@@ -38,8 +56,8 @@ pub const Player = struct {
     pub fn maxFixShiftLength(self: @This()) f32 {
         const min, const max = minMax(self.size.x, self.size.y);
 
-        // if a rectangle R is a 90 degree rotation of another rectangle T
-        // around T's center, this is the distance between R and T's corners
+        // given rectangles R and T, if R is a 90 degree rotation of T around
+        // T's center, this is the distance between R and T's corners
         // along either the x or y axis.
         return (max - min) / 2;
     }
@@ -54,6 +72,10 @@ pub const Player = struct {
 		};
         
 	}
+
+    pub fn draw(self: @This()) void {
+        rl.drawRectangleRec(self.rectangle(), .white);
+    }
 
     pub fn fixRotateCollision(self: *@This(), rec: rl.Rectangle) void {
         const prec = self.rectangle();
@@ -84,6 +106,12 @@ pub const Player = struct {
         };
     }
 
+    pub fn center(self: @This()) rl.Vector2 {
+        const r = self.rectangle();
+        return .{ .x = r.x + r.width/2.0,
+            .y = r.y + r.height/2.0};
+    }
+
 	pub fn pos(self: *@This()) rl.Vector2 { return .{.x = self.x, .y = self.y}; }
 };
 
@@ -108,6 +136,14 @@ pub fn EnumMap(EnumKey: type, Value: type) type {
         return &self.values[@intFromEnum(key)];
     }
     };
+}
+
+/// Minimum translation vector. Smallest trajectory `rec` should travel to
+/// "meet" `v`. Assumes `v` is outside of `rec`
+fn recVecMTV(v: rl.Vector2, rec: rl.Rectangle) rl.Vector2 {
+    const clamp = std.math.clamp;
+    return v.subtract(.{.x = clamp(v.x, rec.x, rec.x+rec.width),
+        .y = clamp(v.y, rec.y, rec.y+rec.width)});
 }
 
 pub inline fn isInRectangle(rec: rl.Rectangle, v: rl.Vector2) bool {
