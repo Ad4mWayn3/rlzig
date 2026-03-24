@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const mainpath = "src/main.zig".*;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -30,7 +32,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "rlzig",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path(&mainpath),
             .target = target,
             .optimize = optimize,
             .imports = &.{

@@ -49,13 +49,5 @@ pub fn main() !void {
         const delta = rl.getFrameTime();
         if (mode == .editor) try editor.update(allocator, delta)
         else try platformer.update(1.0/60.0);
-        if (rl.isKeyPressed(.up)) {
-            const tsize = rgui.getStyle(.default, .{ .default = .text_size });
-            rgui.setStyle(.default, .{ .default = .text_size }, tsize + 1);
-        }
-        if (rl.isKeyPressed(.down)) {
-            const tsize = rgui.getStyle(.default, .{ .default = .text_size });
-            rgui.setStyle(.default, .{ .default = .text_size }, tsize - 1);
-        }
     }
 }

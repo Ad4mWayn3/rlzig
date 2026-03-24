@@ -17,6 +17,7 @@ const Collision = struct {
 const InputName = enum(u4) {
     up = 0, down, left, right,
     jump, duck,
+    zoom, pan,
 };
 
 const InputMap = struct {
@@ -35,9 +36,10 @@ var inputMap = InputMap { .parent = .new(&.{
     .{.right, .{.keyboard = .f}},
     .{.jump, .{.keyboard = .space}},
     .{.duck, .{.keyboard = .z}},
+    .{.zoom, .{.keyboard = .up}},
+    .{.pan, .{.keyboard = .down}},
 }) };
 
-/// Physics constants:
 const Physics = struct {
     const Float = f32;
     gravity: Float = 2000.0,
@@ -77,7 +79,7 @@ pub fn init(self: *Self, allocator: std.mem.Allocator,
         .onGround = false };
     self.player = .{
         .x = 0, .y = 0,
-        .size = .{.x = 26, .y = 52},
+        .size = .{.x = 32, .y = 64},
         .vel = .{.x = 0, .y = 0},
         .orientation = .vertical,
     };
@@ -106,6 +108,9 @@ pub fn update(self: *Self, delta: Seconds) !void {
         );
     }
 
+    if (inputMap.is(.down, .zoom)) self.camera.zoom += delta;
+    if (inputMap.is(.down, .pan)) self.camera.zoom -= delta;
+
     var hmove = true;
     if (inputMap.is(.down, .right)) {
         self.player.vel.x += physics.hAccel * delta;
@@ -121,7 +126,6 @@ pub fn update(self: *Self, delta: Seconds) !void {
         const initPos = self.player.pos();
         var steps: u32 = 0;
         const maxSteps: u32 = @intFromFloat(self.player.maxFixShiftLength());
-        //maxSteps *= 5;
 
         var collisionFound = false;
         for (self.map) |rec| blk: {
@@ -213,7 +217,7 @@ pub fn update(self: *Self, delta: Seconds) !void {
 
 pub fn draw(self: Self) void {
     rl.beginMode2D(self.camera);
-    //rl.drawRectangleLinesEx(self.deadzone, 4.0, .red);
+    
     for (self.map) |rec| rl.drawRectangleRec(rec, .{.r = 0, .g = 100, .b = 243, .a = 255});
     self.player.draw();
     rl.endMode2D();

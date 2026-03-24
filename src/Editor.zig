@@ -7,7 +7,10 @@ const rgui = root.rgui;
 const Seconds = f32;
 const Self = @This();
 const kInputs = [_]rl.KeyboardKey{ .e, .s, .d, .f };
+const tileSizes = [_]f32{64,32,16,8};
 
+gridMode: bool,
+grid: root.Grid2D,
 map: std.ArrayList(rl.Rectangle),
 boxTip: rl.Vector2,
 boxTail: rl.Vector2,
@@ -27,6 +30,7 @@ mode: enum {
 },
 
 pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
+	self.gridMode = true;
 	self.map = try .initCapacity(gpa, 0x40);
 	self.selected = try .initEmpty(gpa, 0x40);
 	self.mode = .scroll;
@@ -79,22 +83,24 @@ pub fn update(self: *Self, gpa: std.mem.Allocator, delta: Seconds) !void {
 	}
 }
 
-pub fn draw(self: *Self, player: *Player) !void {
+pub fn draw(self: Self, player: *Player) !void {
 	rl.beginMode2D(self.camera);
 	for (self.map.items) |rec| {
 		rl.drawRectangleRec(rec, .blue);
 	}
 	rl.drawRectangleRec(player.rectangle(), .white);
+
 	// the outlines are drawn in a separate loop to ensure they're on top
 	// of every solid rectangle. this involves a bit of overhead because of
 	// the need to run over the array twice.
 	for (self.map.items, 0..) |rec, i| {
 		if (self.selected.isSet(i))
-			rl.drawRectangleLinesEx(rec, 3.0, .white);
+			rl.drawRectangleLinesEx(rec, 2.5, .dark_blue);
 	}
 
-	rl.drawRectangleLinesEx(root.rectangleTipTail(self.selectorTip, self.selectorTail), 3.0, .white);
-	rl.drawRectangleRec(root.rectangleTipTail(self.boxTail, self.boxTip), .blue);
+	rl.drawRectangleLinesEx(root.rectangleTipTail(self.selectorTip, self.selectorTail), 2.5, .white);
+	rl.drawRectangleRec(root.rectangleTipTail(self.boxTail, self.boxTip), .dark_blue);
+	rl.drawRectangleRec(self.tileAtMouse(), .init(255,255,255,100));
 	rl.endMode2D();
 	var buffer = [_]u8{0} ** 0x200;
 	{
@@ -113,6 +119,13 @@ pub fn draw(self: *Self, player: *Player) !void {
 		;
 		rl.drawText(s2, 400, 260, 21, .white);
 	}
+}
+
+fn tileAtMouse(self: @This()) rl.Rectangle {
+	const mousePos = rl.getMousePosition().add(self.camera.target);
+	return root.Grid2D.initCamera(self.camera, root.screenV(),.init(tileSizes[2],
+		tileSizes[2])
+	).tileAt(mousePos, .zero());
 }
 
 inline fn handleBuildInput(self: *Self, gpa: std.mem.Allocator) !void {
@@ -136,6 +149,9 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 	const mousePos: rl.Vector2 =
 		rl.getMousePosition().add(self.camera.target);
 	const mouseDelta = rl.getMouseDelta();
+
+	const tile = self.tileAtMouse();
+	_ = tile; // autofix
 
 	if (rl.isMouseButtonPressed(.left)) l1: {
 		if (rl.isKeyDown(.z)) break :l1;

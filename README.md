@@ -1,3 +1,3 @@
-# rlzig
+# Domino climb
 
-learning the zig programming language by making a raylib game
+implementation of the domino climb game in zig, with the bindings for raylib.

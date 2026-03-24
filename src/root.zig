@@ -28,6 +28,74 @@ pub const Input = union(InputTag) {
 	};}
 };
 
+/// Axis-aligned recta angular grid. Safe variants guarantee:
+/// - `spacing` is strictly positive
+/// - `offset` is non-negative and less than `spacing` on each axis
+pub const Grid2D = struct {
+    //viewport: rl.Rectangle,
+    spacing: rl.Vector2,
+    offset: rl.Vector2,
+
+    const Invalid = error {
+        NonPositiveSpacing,
+        LongOffset,
+    };
+
+    pub fn init(spacing: rl.Vector2, offset: rl.Vector2
+    ) Invalid!@This() {
+        if (spacing.x * spacing.y == 0) return .NonPositiveSpacing;
+        return .{
+
+        };
+    }
+
+    pub fn initUnsafe(spacing: rl.Vector2, offset: rl.Vector2) @This() {
+
+    }
+
+    pub fn draw(self: @This(), viewport: rl.Rectangle,
+        color: rl.Color, thick: f32
+    ) void {
+        std.debug.assert(self.spacing.x*self.spacing.y != 0);
+        const sp, const vp = .{self.spacing,viewport};
+        const ofs: rl.Vector2 = .init(@mod(-self.offset.x,sp.x), @mod(-self.offset.y,sp.y));
+        var x, var y = .{vp.x+ofs.x,vp.y+ofs.y};
+
+
+        while (x < vp.x+vp.width): (x += sp.x)
+            rl.drawLineEx(.{.x=x,.y=vp.y},.{.x=x,.y=vp.y+vp.height}, thick, color);
+        while (y < vp.y+vp.height): (y += sp.y)
+            rl.drawLineEx(.{.x=vp.x,.y=y},.{.x=vp.x+vp.width,.y=y}, thick, color);
+    }
+
+    pub fn alignRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
+
+    }
+
+    // pub fn intersectionAt(self: @This(), p: rl.Vector2, offset: rl.Vector2
+    // ) rl.Vector2 {
+    //     _ = offset;
+    //     var x, var y = .{p.x/self.spacing.x, p.y/self.spacing.y};
+    //     const xmin, const xmax = .{@floor(x), @ceil(x)};
+    //     const ymin, const ymax = .{@floor(y), @ceil(y)};
+    //     x = if (@abs(xmin-p.x) <= @abs(xmax-p.x)) xmin else xmax;
+    //     y = if (@abs(ymin-p.y) <= @abs(ymax-p.y)) ymin else ymax;
+    //     return .init(x,y);
+    // }
+
+    pub fn tileAt(self: @This(), p: rl.Vector2) rl.Rectangle {
+        const x, const y = .{@floor(p.x/self.spacing.x),
+            @floor(p.y/self.spacing.y)};
+        const newP = rl.Vector2.init(self.spacing.x*x,self.spacing.y*y)
+            .add(self.offset);
+        return .init(newP.x,newP.y,self.spacing.x,self.spacing.y);
+    }
+
+    pub fn origin(self: @This()) rl.Vector2 {
+        return .init(self.viewport.x, self.viewport.y);
+    }
+};
+
 pub const DeadzoneCamera2D = struct {
     cam: *rl.Camera2D,
     deadzone: *rl.Rectangle,
@@ -163,6 +231,12 @@ pub inline fn rectangleV(v: rl.Vector2, u: rl.Vector2) rl.Rectangle {
 pub inline fn rectangleTipTail(v: rl.Vector2, u: rl.Vector2) rl.Rectangle {
     return rl.Rectangle{ .x = @min(v.x, u.x), .y = @min(v.y, u.y),
         .width = @abs(u.x - v.x), .height = @abs(u.y - v.y) };
+}
+
+/// Signed distance from `x` to `inter`
+fn sdInterval(x: f32, inter: [2]f32) f32 {
+    std.debug.assert(@min(inter[0], inter[1]) == inter[0]);
+    return (x-inter[0]) - (inter[0]-inter[1])/2.0;
 }
 
 pub fn screenV() rl.Vector2 { return .{

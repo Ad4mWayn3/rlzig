@@ -1,0 +1,23 @@
+bugfixes
+	Ground Crouch at Wall: when crouching on ground, if after crouching the
+		hitbox collides, the player will clip downwards through the hitbox, and
+		keep sliding down as long as they hold "crouch", or until the player
+		stops colliding
+editor qol
+	arrow-key translation
+	grid mode
+	zoom
+	re-scale rectangles
+	rotate, mirror multiple selections
+materials
+	bouncy
+	sticky
+	slippery
+	pads
+		speed pad
+		jump pad
+		gravity pad
+	climbing walls
+textures drawing
+editor features
+	drawable background
