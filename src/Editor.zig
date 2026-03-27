@@ -122,10 +122,10 @@ pub fn draw(self: Self, player: *Player) !void {
 }
 
 fn tileAtMouse(self: @This()) rl.Rectangle {
-	const mousePos = rl.getMousePosition().add(self.camera.target);
-	return root.Grid2D.initCamera(self.camera, root.screenV(),.init(tileSizes[2],
-		tileSizes[2])
-	).tileAt(mousePos, .zero());
+    const mousePos = rl.getMousePosition().add(self.camera.target);
+    return root.Grid2D.initCamera(self.camera, root.screenV(),.init(tileSizes[2],
+        tileSizes[2])
+    ).tileAt(mousePos, .zero());
 }
 
 inline fn handleBuildInput(self: *Self, gpa: std.mem.Allocator) !void {

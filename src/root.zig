@@ -4,34 +4,37 @@ pub const rgui: type = @import("raygui");
 
 pub const InputTag = enum { mouse, keyboard, gamepad };
 pub const Input = union(InputTag) {
-	pub const State = enum { up, down, pressed, released };
-	mouse: rl.MouseButton,
-	keyboard: rl.KeyboardKey,
-	gamepad: struct {button: rl.GamepadButton, id: i32},
-	pub fn is(self: Input, state: State) bool { return switch (state) {
-		.up => !self.is(.down),
-		.down => switch (self) {
-			.mouse => |mb| rl.isMouseButtonDown(mb),
-			.keyboard => |k| rl.isKeyDown(k),
-			.gamepad => |gp| rl.isGamepadButtonDown(gp.id, gp.button),
-		},
-		.pressed => switch (self) {
-			.mouse => |mb| rl.isMouseButtonPressed(mb),
-			.keyboard => |k| rl.isKeyPressed(k),
-			.gamepad => |gp| rl.isGamepadButtonPressed(gp.id, gp.button),
-		},
-		.released => switch (self) {
-			.mouse => |mb| rl.isMouseButtonReleased(mb),
-			.keyboard => |k| rl.isKeyReleased(k),
-			.gamepad => |gp| rl.isGamepadButtonReleased(gp.id, gp.button),
-		},
-	};}
+    pub const State = enum { up, down, pressed, released };
+    mouse: rl.MouseButton,
+    keyboard: rl.KeyboardKey,
+    gamepad: struct {button: rl.GamepadButton, id: i32},
+    pub fn is(self: Input, state: State) bool { return switch (state) {
+        .up => !self.is(.down),
+        .down => switch (self) {
+            .mouse => |mb| rl.isMouseButtonDown(mb),
+            .keyboard => |k| rl.isKeyDown(k),
+            .gamepad => |gp| rl.isGamepadButtonDown(gp.id, gp.button),
+        },
+        .pressed => switch (self) {
+            .mouse => |mb| rl.isMouseButtonPressed(mb),
+            .keyboard => |k| rl.isKeyPressed(k),
+            .gamepad => |gp| rl.isGamepadButtonPressed(gp.id, gp.button),
+        },
+        .released => switch (self) {
+            .mouse => |mb| rl.isMouseButtonReleased(mb),
+            .keyboard => |k| rl.isKeyReleased(k),
+            .gamepad => |gp| rl.isGamepadButtonReleased(gp.id, gp.button),
+        },
+    };}
 };
 
-/// Axis-aligned recta angular grid. Safe variants guarantee:
+/// Axis-aligned rectangular grid. Safe variants guarantee:
 /// - `spacing` is strictly positive
 /// - `offset` is non-negative and less than `spacing` on each axis
+/// For safe manipulation, it is recommended that initialization and usage is
+/// limited to 
 pub const Grid2D = struct {
+
     //viewport: rl.Rectangle,
     spacing: rl.Vector2,
     offset: rl.Vector2,
@@ -41,16 +44,27 @@ pub const Grid2D = struct {
         LongOffset,
     };
 
+    pub fn checkValid(self: @This()) bool {
+        const spacing, const offset = .{self.spacing, self.offset};
+        return spacing.x > 0 and spacing.y > 0
+            and @abs(offset.x) <= spacing.x and @abs(offset.y) <= spacing.y;
+    }
+
+    //pub fn initCamera(self: *@This(), camera: rl.Camera2D,
+
     pub fn init(spacing: rl.Vector2, offset: rl.Vector2
     ) Invalid!@This() {
-        if (spacing.x * spacing.y == 0) return .NonPositiveSpacing;
+        if (spacing.x <= 0 or spacing.y <= 0) return .NonPositiveSpacing;
         return .{
-
+            .spacing = spacing,
+            .offset = .{ .x = @mod(offset.x, spacing.x), .y = @mod(offset.y, spacing.y) },
         };
     }
 
     pub fn initUnsafe(spacing: rl.Vector2, offset: rl.Vector2) @This() {
-
+        std.debug.assert(spacing.x > 0 and spacing.y > 0
+            and @abs(offset.x) <= spacing.x and @abs(offset.y) <= spacing.y);
+        return .{ .offset = offset, .spacing = spacing };
     }
 
     pub fn draw(self: @This(), viewport: rl.Rectangle,
@@ -68,9 +82,9 @@ pub const Grid2D = struct {
             rl.drawLineEx(.{.x=vp.x,.y=y},.{.x=vp.x+vp.width,.y=y}, thick, color);
     }
 
-    pub fn alignRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
+    // pub fn alignRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
 
-    }
+    // }
 
     // pub fn intersectionAt(self: @This(), p: rl.Vector2, offset: rl.Vector2
     // ) rl.Vector2 {
@@ -115,9 +129,9 @@ pub const DeadzoneCamera2D = struct {
 };
 
 pub const Player = struct {
-	x: f32, y: f32,
-	vel: rl.Vector2,
-	size: rl.Vector2,
+    x: f32, y: f32,
+    vel: rl.Vector2,
+    size: rl.Vector2,
     orientation: enum {horizontal, vertical},
 
     /// Max distance the player hitbox shall be shifted for certain edge cases
@@ -130,16 +144,16 @@ pub const Player = struct {
         return (max - min) / 2;
     }
 
-	pub fn shifted(self: @This(), v: rl.Vector2) @This() {
-		return .{
-			.size = self.size,
-			.vel = self.vel,
-			.x = self.x + v.x,
-			.y = self.y + v.y,
+    pub fn shifted(self: @This(), v: rl.Vector2) @This() {
+        return .{
+            .size = self.size,
+            .vel = self.vel,
+            .x = self.x + v.x,
+            .y = self.y + v.y,
             .orientation = self.orientation,
-		};
-        
-	}
+        };
+
+    }
 
     pub fn draw(self: @This()) void {
         rl.drawRectangleRec(self.rectangle(), .white);
@@ -151,7 +165,7 @@ pub const Player = struct {
         std.debug.assert(colliding(prec, rec));
         switch (self.orientation) {
         .horizontal => {
-            
+
         },
         .vertical => {
 
@@ -159,7 +173,7 @@ pub const Player = struct {
         }
     }
 
-	pub fn rectangle(self: @This()) rl.Rectangle {
+    pub fn rectangle(self: @This()) rl.Rectangle {
         var x, var y, var w, var h = .{self.x, self.y,
             self.size.x, self.size.y};
         if (self.orientation == .horizontal) {
