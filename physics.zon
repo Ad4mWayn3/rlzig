@@ -2,6 +2,6 @@
 	.gravity = 2000.0,
 	.hAccel = 2000.0,
 	.maxHVel = 400.0,
-	.jumpImpulse = 600.0,
+	.jumpImpulse = 608,
 	.minSpeedThreshold = 1e-4,
 }

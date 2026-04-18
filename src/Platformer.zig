@@ -33,12 +33,12 @@ const InputMap = struct {
 };
 
 var inputMap = InputMap{ .parent = .new(&.{
-    .{ .up, .{ .keyboard = .e } },
-    .{ .down, .{ .keyboard = .d } },
-    .{ .left, .{ .keyboard = .s } },
-    .{ .right, .{ .keyboard = .f } },
+    .{ .up, .{ .keyboard = .i } },
+    .{ .down, .{ .keyboard = .k } },
+    .{ .left, .{ .keyboard = .j } },
+    .{ .right, .{ .keyboard = .l } },
     .{ .jump, .{ .keyboard = .space } },
-    .{ .duck, .{ .keyboard = .z } },
+    .{ .duck, .{ .keyboard = .semicolon } },
 }) };
 
 const Physics = struct {
@@ -46,7 +46,7 @@ const Physics = struct {
     gravity: Float = 2000.0,
     hAccel: Float = 2000.0,
     maxHVel: Float = 400.0,
-    jumpImpulse: Float = 600.0,
+    jumpImpulse: Float = 608,
     minSpeedThreshold: Float = 1e-4,
 };
 
@@ -100,11 +100,11 @@ pub fn update(self: *Self, delta: Seconds) !void {
     if (rgui.button(.{ .x = 30, .y = 400, .width = 300, .height = 50 }, "Update physics parameters")) {
         const buf = try rlzig.loadFileDynamic(self.gpa, "physics.zon", true);
         defer self.gpa.free(buf);
-        physics = try std.zon.parse.fromSlice(Physics, self.gpa, buf[0 .. buf.len - 1 :0], null, .{});
+        physics = try std.zon.parse.fromSlice(Physics, self.gpa, buf[0..buf.len-1 :0], null, .{});
     }
 
-    if (inputMap.is(.down, .zoom)) self.camera.zoom += delta;
-    if (inputMap.is(.down, .pan)) self.camera.zoom -= delta;
+    // if (inputMap.is(.down, .zoom)) self.camera.zoom += delta;
+    // if (inputMap.is(.down, .pan)) self.camera.zoom -= delta;
 
     var hmove = true;
     if (inputMap.is(.down, .right)) {

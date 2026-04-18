@@ -31,6 +31,7 @@ mode: enum {
 
 pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
 	self.gridMode = true;
+	self.grid = try .initSquare(tileSizes[2], .zero());
 	self.map = try .initCapacity(gpa, 0x40);
 	self.selected = try .initEmpty(gpa, 0x40);
 	self.mode = .scroll;
@@ -87,6 +88,11 @@ pub fn draw(self: Self, player: *Player) !void {
 	rl.beginMode2D(self.camera);
 	for (self.map.items) |rec| {
 		rl.drawRectangleRec(rec, .blue);
+		//rl.drawCircleV(.init(rec.x, rec.y), 1.2, .red);
+	}
+	for (self.map.items) |rec| {
+		// rl.drawRectangleRec(rec, .blue);
+		rl.drawCircleV(.init(rec.x, rec.y), 1.2, .red);
 	}
 	rl.drawRectangleRec(player.rectangle(), .white);
 
@@ -99,9 +105,17 @@ pub fn draw(self: Self, player: *Player) !void {
 	}
 
 	rl.drawRectangleLinesEx(root.rectangleTipTail(self.selectorTip, self.selectorTail), 2.5, .white);
-	rl.drawRectangleRec(root.rectangleTipTail(self.boxTail, self.boxTip), .dark_blue);
-	rl.drawRectangleRec(self.tileAtMouse(), .init(255,255,255,100));
+
+	const box = root.rectangleTipTail(self.boxTail, self.boxTip);
+	rl.drawRectangleRec(
+		if (self.gridMode) self.grid.alignAndFitRec(box)
+		else box,
+		.dark_blue);
+	rl.drawRectangleRec(try self.tileAtMouse(), .init(255,255,255,100));
+	self.grid.draw(root.rectangleV(self.camera.target.add(self.camera.offset.scale(-1)),
+		root.screenV().scale(0.5)), .init(255,255,255,90), 1.3);
 	rl.endMode2D();
+
 	var buffer = [_]u8{0} ** 0x200;
 	{
 		const s1 = try std.fmt.bufPrint(&buffer, "mode: {s}", .{self.mode.name()});
@@ -121,11 +135,12 @@ pub fn draw(self: Self, player: *Player) !void {
 	}
 }
 
-fn tileAtMouse(self: @This()) rl.Rectangle {
+fn tileAtMouse(self: @This()) !rl.Rectangle {
     const mousePos = rl.getMousePosition().add(self.camera.target);
-    return root.Grid2D.initCamera(self.camera, root.screenV(),.init(tileSizes[2],
-        tileSizes[2])
-    ).tileAt(mousePos, .zero());
+    // return root.Grid2D.initCamera(self.camera, root.screenV(),.init(tileSizes[2],
+    //     tileSizes[2])
+    // ).tileAt(mousePos, .zero());
+	return self.grid.tileAt(mousePos);
 }
 
 inline fn handleBuildInput(self: *Self, gpa: std.mem.Allocator) !void {
@@ -138,7 +153,8 @@ inline fn handleBuildInput(self: *Self, gpa: std.mem.Allocator) !void {
 	} else if (rl.isMouseButtonDown(.left)) {
 		self.boxTail = mousePos;
 	} else if (rl.isMouseButtonReleased(.left) and self.boxTail.equals(self.boxTip) == 0) {
-		try self.map.append(gpa, root.rectangleTipTail(self.boxTip, self.boxTail));
+		try self.map.append(gpa, self.grid.alignAndFitRec(
+			root.rectangleTipTail(self.boxTip, self.boxTail)));
 		try self.selected.resize(gpa, self.map.items.len, false);
 	} else {
 		self.boxTip = self.boxTail;
@@ -150,7 +166,7 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 		rl.getMousePosition().add(self.camera.target);
 	const mouseDelta = rl.getMouseDelta();
 
-	const tile = self.tileAtMouse();
+	const tile = try self.tileAtMouse();
 	_ = tile; // autofix
 
 	if (rl.isMouseButtonPressed(.left)) l1: {
@@ -181,6 +197,14 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 
 	const bitLen: usize = self.selected.bit_length;
 	std.debug.assert(bitLen == self.map.items.len);
+
+	if (rl.isKeyPressed(.g)) {
+		for (0..bitLen) |i| if (self.selected.isSet(i)) {
+			self.map.items[i] = self.grid.alignRec(self.map.items[i]);
+		} ;
+	}
+
+	
 	if (rl.isKeyPressed(.delete)) {
 		var indexes = try std.ArrayList(usize).initCapacity(gpa, self.map.items.len);
 		defer indexes.deinit(gpa);
@@ -193,7 +217,7 @@ inline fn handleEditInput(self: *Self, gpa: std.mem.Allocator) !void {
 			- @as(i64,@intCast(indexes.items.len));
 		if (newlen < 0) unreachable;
 		try self.selected.resize(gpa, @as(usize,@intCast(newlen)), false);
-	} else if (rl.isKeyDown(.z)) {
+	} else if (rl.isMouseButtonDown(.middle)) {
 		for (0..bitLen) |i| l: {
 			if (!self.selected.isSet(i)) break :l;
 			self.map.items[i].x += mouseDelta.x;

@@ -31,11 +31,7 @@ pub const Input = union(InputTag) {
 /// Axis-aligned rectangular grid. Safe variants guarantee:
 /// - `spacing` is strictly positive
 /// - `offset` is non-negative and less than `spacing` on each axis
-/// For safe manipulation, it is recommended that initialization and usage is
-/// limited to 
 pub const Grid2D = struct {
-
-    //viewport: rl.Rectangle,
     spacing: rl.Vector2,
     offset: rl.Vector2,
 
@@ -50,11 +46,13 @@ pub const Grid2D = struct {
             and @abs(offset.x) <= spacing.x and @abs(offset.y) <= spacing.y;
     }
 
-    //pub fn initCamera(self: *@This(), camera: rl.Camera2D,
+    pub fn initSquare(spacing: f32, offset: rl.Vector2) Invalid!@This() {
+        return .init(.init(spacing,spacing), offset);
+    }
 
     pub fn init(spacing: rl.Vector2, offset: rl.Vector2
     ) Invalid!@This() {
-        if (spacing.x <= 0 or spacing.y <= 0) return .NonPositiveSpacing;
+        if (spacing.x <= 0 or spacing.y <= 0) return Invalid.NonPositiveSpacing;
         return .{
             .spacing = spacing,
             .offset = .{ .x = @mod(offset.x, spacing.x), .y = @mod(offset.y, spacing.y) },
@@ -70,10 +68,10 @@ pub const Grid2D = struct {
     pub fn draw(self: @This(), viewport: rl.Rectangle,
         color: rl.Color, thick: f32
     ) void {
-        std.debug.assert(self.spacing.x*self.spacing.y != 0);
+        std.debug.assert(self.checkValid());
         const sp, const vp = .{self.spacing,viewport};
-        const ofs: rl.Vector2 = .init(@mod(-self.offset.x,sp.x), @mod(-self.offset.y,sp.y));
-        var x, var y = .{vp.x+ofs.x,vp.y+ofs.y};
+        //const ofs = self.offset;
+        var x, var y = .{sp.x*@floor(vp.x/sp.x), sp.y*@floor(vp.y/sp.y)};
 
 
         while (x < vp.x+vp.width): (x += sp.x)
@@ -82,20 +80,42 @@ pub const Grid2D = struct {
             rl.drawLineEx(.{.x=vp.x,.y=y},.{.x=vp.x+vp.width,.y=y}, thick, color);
     }
 
-    // pub fn alignRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
+    pub fn alignRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
+        if (rec.width * rec.height == 0) return rec;
+        const x, const y, const w, const h = .{rec.x, rec.y, rec.width, rec.height};
+        const p1 = self.tileAt(.init(x,y));
+        var p2 = self.tileAt(.init(x+w, y+h));
+        if (@mod(x,self.spacing.x) == 0) p2.width = 0;
+        if (@mod(y,self.spacing.y) == 0) p2.height = 0;
 
-    // }
+        return rectangleTipTail(.init(p1.x,p1.y),
+            //.init(p2.x+p2.width,p2.y+p2.height)
+            .init(p1.x+rec.width, p1.y+rec.height),
+        );
+    }
 
-    // pub fn intersectionAt(self: @This(), p: rl.Vector2, offset: rl.Vector2
-    // ) rl.Vector2 {
-    //     _ = offset;
-    //     var x, var y = .{p.x/self.spacing.x, p.y/self.spacing.y};
-    //     const xmin, const xmax = .{@floor(x), @ceil(x)};
-    //     const ymin, const ymax = .{@floor(y), @ceil(y)};
-    //     x = if (@abs(xmin-p.x) <= @abs(xmax-p.x)) xmin else xmax;
-    //     y = if (@abs(ymin-p.y) <= @abs(ymax-p.y)) ymin else ymax;
-    //     return .init(x,y);
-    // }
+    pub fn alignAndFitRec(self: @This(), rec: rl.Rectangle) rl.Rectangle {
+        if (rec.width * rec.height == 0) return rec;
+        const x, const y, const w, const h = .{rec.x, rec.y, rec.width, rec.height};
+        const p1 = self.tileAt(.init(x,y));
+        var p2 = self.tileAt(.init(x+w, y+h));
+        if (@mod(x,self.spacing.x) == 0) p2.width = 0;
+        if (@mod(y,self.spacing.y) == 0) p2.height = 0;
+
+        return rectangleTipTail(.init(p1.x,p1.y),
+            .init(p2.x+p2.width,p2.y+p2.height));
+    }
+
+    pub fn intersectionAt(self: @This(), p: rl.Vector2, offset: rl.Vector2
+    ) rl.Vector2 {
+        _ = offset;
+        var x, var y = .{p.x/self.spacing.x, p.y/self.spacing.y};
+        const xmin, const xmax = .{@floor(x), @ceil(x)};
+        const ymin, const ymax = .{@floor(y), @ceil(y)};
+        x = if (@abs(xmin-p.x) <= @abs(xmax-p.x)) xmin else xmax;
+        y = if (@abs(ymin-p.y) <= @abs(ymax-p.y)) ymin else ymax;
+        return .init(x,y);
+    }
 
     pub fn tileAt(self: @This(), p: rl.Vector2) rl.Rectangle {
         const x, const y = .{@floor(p.x/self.spacing.x),
