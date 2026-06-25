@@ -33,12 +33,12 @@ const InputMap = struct {
 };
 
 var inputMap = InputMap{ .parent = .new(&.{
-    .{ .up, .{ .keyboard = .i } },
-    .{ .down, .{ .keyboard = .k } },
-    .{ .left, .{ .keyboard = .j } },
-    .{ .right, .{ .keyboard = .l } },
-    .{ .jump, .{ .keyboard = .space } },
-    .{ .duck, .{ .keyboard = .semicolon } },
+    .{ .up,    .{ .keyboard = .e } },
+    .{ .down,  .{ .keyboard = .d } },
+    .{ .left,  .{ .keyboard = .s } },
+    .{ .right, .{ .keyboard = .f } },
+    .{ .jump,  .{ .keyboard = .space } },
+    .{ .duck,  .{ .keyboard = .z } },
 }) };
 
 const Physics = struct {

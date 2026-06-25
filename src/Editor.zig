@@ -75,7 +75,9 @@ pub fn update(self: *Self, gpa: std.mem.Allocator, delta: Seconds) !void {
 	.width = 200, .height = 60 }, "save"))
 		try root.saveRectsToFile("map.bin", self.map.items);
 	
-	if (rgui.button(.{ .x = 40, .y = 40 + 80*3, .width = 200,
+	_ = rgui.checkBox(.init(40, 40+80*3, 30,30), "grid mode", &self.gridMode);
+	
+	if (rgui.button(.{ .x = 40, .y = 40 + 80*6, .width = 200,
 	.height = 60 }, "load")) {
 		self.map.shrinkAndFree(gpa, 0);
 		try root.loadRectsFromFile("map.bin", gpa, &self.map);
@@ -112,8 +114,12 @@ pub fn draw(self: Self, player: *Player) !void {
 		else box,
 		.dark_blue);
 	rl.drawRectangleRec(try self.tileAtMouse(), .init(255,255,255,100));
-	self.grid.draw(root.rectangleV(self.camera.target.add(self.camera.offset.scale(-1)),
-		root.screenV().scale(0.5)), .init(255,255,255,90), 1.3);
+
+	if (self.gridMode) {
+		self.grid.draw(root.rectangleV(self.camera.target
+			.add(self.camera.offset.scale(-1)), root.screenV()),
+			.init(255,255,255,90), 1);
+	}
 	rl.endMode2D();
 
 	var buffer = [_]u8{0} ** 0x200;

@@ -10,10 +10,32 @@ var editor: Editor = undefined;
 var platformer: Platformer = undefined;
 var printBuffer: [0x200]u8 = undefined;
 
+pub fn _main() !void {
+    var prng = std.Random.DefaultPrng.init(undefined);
+    const rand = prng.random();
+
+    rl.initWindow(1920, 1080, "ziggy");
+    defer rl.closeWindow();
+
+    while (!rl.windowShouldClose()) {
+        rl.beginDrawing();
+        rl.clearBackground(.black);
+
+        for (0..7500) |_| {
+            const v = rl.Vector2.init(rand.float(f32), rand.float(f32))
+                .multiply(.init(1920,1080));
+            rl.drawTriangle(v, v.add(.init(-30,-30)), v.add(.init(-60,0)), .white);
+        }
+
+        rl.drawFPS(30,30);
+        rl.endDrawing();
+    }
+}
+
 pub fn main() !void {
     rl.setTraceLogLevel(.warning);
     rl.setExitKey(.null);
-    rl.setTargetFPS(60);
+    //rl.setTargetFPS(60);
     rl.initWindow(800, 600, "rlzig!");
     defer rl.closeWindow();
     rl.setWindowPosition(80,80);
