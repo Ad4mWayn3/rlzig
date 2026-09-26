@@ -1,8 +1,8 @@
-const root: type = @import("rlzig");
+const root: type = @import("root.zig");
 const Player = root.Player;
-const std: type = root.std;
-const rl: type = root.rl;
-const rgui = root.rgui;
+const std = @import("std");
+const rl = @import("raylib");
+const rgui = @import("raygui");
 
 const Seconds = f32;
 const Self = @This();

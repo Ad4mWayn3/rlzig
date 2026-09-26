@@ -1,4 +1,4 @@
-const rlzig = @import("rlzig");
+const rlzig = @import("root.zig");
 const std = rlzig.std;
 const rl = rlzig.rl;
 const rgui = rlzig.rgui;

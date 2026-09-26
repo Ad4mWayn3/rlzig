@@ -1,4 +1,4 @@
-const rlzig = @import("rlzig");
+const rlzig = @import("root.zig");
 const rl = rlzig.rl;
 const rgui = rlzig.rgui;
 const rmath = rl.math;
@@ -12,6 +12,10 @@ const Collision = struct {
     horizontal: bool,
     vertical: bool,
     onGround: bool,
+};
+
+const PropMaterial = enum(u4) {
+    default = 0, rubber, ice, impulse,
 };
 
 const InputName = enum(u4) {
@@ -52,27 +56,29 @@ const Physics = struct {
 
 var physics: Physics = .{};
 
-map: []rl.Rectangle,
 gpa: std.mem.Allocator,
+map: []rl.Rectangle,
+prop_materials: []PropMaterial,
 player: Player,
 camera: rl.Camera2D,
 deadzone: rl.Rectangle,
 rmd: rl.Vector2,
 collision: Collision,
-printBuffer: []u8,
-inputHeldTime: [InputMap.Parent.count]Seconds,
-movingOppositeH: bool = false,
-movingOppositeT: Seconds = 0.0,
-initDragVel: rl.Vector2 = .{ .x = 0, .y = 0 },
+print_buffer: []u8,
+input_held_time: [InputMap.Parent.count]Seconds,
+moving_opposite_h: bool = false,
+moving_opposite_t: Seconds = 0.0,
+init_drag_vel: rl.Vector2 = .{ .x = 0, .y = 0 },
 
-pub fn init(self: *Self, allocator: std.mem.Allocator, map: []rl.Rectangle, printBuffer: []u8) !void {
-    self.gpa = allocator;
+pub fn init(self: *Self, gpa: std.mem.Allocator, map: []rl.Rectangle, print_buffer: []u8) !void {
+    self.gpa = gpa;
     const buf = try self.gpa.alloc(u8, 32);
     self.gpa.free(buf);
 
-    self.inputHeldTime = .{0.0} ** InputMap.Parent.count;
+    self.input_held_time = .{0.0} ** InputMap.Parent.count;
     self.map = map;
-    self.printBuffer = printBuffer;
+    self.prop_materials = try self.gpa.alloc(PropMaterial, self.map.len);
+    self.print_buffer = print_buffer;
     self.rmd = .{ .x = 0, .y = 0 };
     self.collision = .{ .horizontal = false, .vertical = false, .onGround = false };
     self.player = .{
@@ -92,8 +98,12 @@ pub fn init(self: *Self, allocator: std.mem.Allocator, map: []rl.Rectangle, prin
     self.camFollow(0.3);
 }
 
+pub fn deinit(self: *Self) void {
+    self.gpa.free(self.prop_materials);
+}
+
 fn increaseHoldTime(self: *Self, input: InputName, time: Seconds) void {
-    self.inputHeldTime[@intFromEnum(input)] += time;
+    self.input_held_time[@intFromEnum(input)] += time;
 }
 
 pub fn update(self: *Self, delta: Seconds) !void {
@@ -109,10 +119,10 @@ pub fn update(self: *Self, delta: Seconds) !void {
     var hmove = true;
     if (inputMap.is(.down, .right)) {
         self.player.vel.x += physics.hAccel * delta;
-        self.movingOppositeH = self.player.vel.x < 0.0;
+        self.moving_opposite_h = self.player.vel.x < 0.0;
     } else if (inputMap.is(.down, .left)) {
         self.player.vel.x -= physics.hAccel * delta;
-        self.movingOppositeH = self.player.vel.x > 0.0;
+        self.moving_opposite_h = self.player.vel.x > 0.0;
     } else hmove = false;
 
     if (inputMap.is(.up, .duck) and self.player.orientation == .horizontal) {
@@ -183,16 +193,16 @@ pub fn update(self: *Self, delta: Seconds) !void {
         self.player.vel.y += physics.gravity * delta;
     } else self.collision.onGround = true;
 
-    if ((self.movingOppositeH or !hmove) and self.collision.onGround) blk: {
-        self.movingOppositeT += delta;
+    if ((self.moving_opposite_h or !hmove) and self.collision.onGround) blk: {
+        self.moving_opposite_t += delta;
         if (@abs(self.player.vel.x) < physics.minSpeedThreshold) {
             self.player.vel.x = 0.0;
             break :blk;
         }
-        self.player.vel.x = self.initDragVel.x * std.math.pow(f32, 0.12, self.movingOppositeT * 12.0);
+        self.player.vel.x = self.init_drag_vel.x * std.math.pow(f32, 0.12, self.moving_opposite_t * 12.0);
     } else {
-        self.movingOppositeT = 0.0;
-        self.initDragVel.x = self.player.vel.x;
+        self.moving_opposite_t = 0.0;
+        self.init_drag_vel.x = self.player.vel.x;
     }
 
     if (self.collision.horizontal)
@@ -209,7 +219,7 @@ pub fn draw(self: Self) void {
     for (self.map) |rec| rl.drawRectangleRec(rec, .{ .r = 0, .g = 100, .b = 243, .a = 255 });
     self.player.draw();
     rl.endMode2D();
-    const printed = std.fmt.bufPrint(self.printBuffer, "on ground: {s}\x00", .{if (self.collision.onGround) "true" else "false"}) catch unreachable;
+    const printed = std.fmt.bufPrint(self.print_buffer, "on ground: {s}\x00", .{if (self.collision.onGround) "true" else "false"}) catch unreachable;
     std.debug.assert(printed[printed.len - 1] == 0);
     rl.drawText(printed[0 .. printed.len - 1 :0], 30, 30, 21, .white);
     rlzig.drawVecCentered(3.0, .light_gray, self.player.vel.scale(1.0 / 10.0));

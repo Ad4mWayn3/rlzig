@@ -1,7 +1,7 @@
-const Editor = @import("editor");
-const Platformer = @import("platformer");
-const rlzig = @import("rlzig");
-const std: type = rlzig.std;
+const Editor = @import("Editor.zig");
+const Platformer = @import("Platformer.zig");
+const rlzig = @import("root.zig");
+const std = @import("std");
 const rl: type = rlzig.rl;
 const rgui: type = rlzig.rgui;
 
@@ -35,7 +35,7 @@ pub fn _main() !void {
 pub fn main() !void {
     rl.setTraceLogLevel(.warning);
     rl.setExitKey(.null);
-    //rl.setTargetFPS(60);
+    rl.setTargetFPS(165);
     rl.initWindow(800, 600, "rlzig!");
     defer rl.closeWindow();
     rl.setWindowPosition(80,80);
@@ -70,6 +70,6 @@ pub fn main() !void {
 
         const delta = rl.getFrameTime();
         if (mode == .editor) try editor.update(allocator, delta)
-        else try platformer.update(1.0/60.0);
+        else try platformer.update(delta);
     }
 }
