@@ -48,8 +48,9 @@ pub fn main() !void {
     rl.setWindowSize(x[0], x[1]);}
 
     try editor.init(allocator);
-    defer editor.deinit(allocator);
+    defer editor.deinit();
     try platformer.init(allocator, editor.map.items, &printBuffer);
+    defer platformer.deinit();
     
     rgui.setStyle(.default, .{ .default = .text_size }, 21);
     var mode: enum(u2) { platformer, editor } = .editor;
@@ -61,15 +62,17 @@ pub fn main() !void {
             mode = @enumFromInt((@intFromEnum(mode) +% 1) % len);
             if (mode == .platformer) platformer.map = editor.map.items;
         }
+
         rl.clearBackground(.black);
         rl.beginDrawing();
         rl.drawFPS(30,400);
         if (mode == .editor) try editor.draw(&platformer.player)
         else platformer.draw();
-        rl.endDrawing();
+
 
         const delta = rl.getFrameTime();
-        if (mode == .editor) try editor.update(allocator, delta)
+        if (mode == .editor) try editor.update(delta)
         else try platformer.update(delta);
+        rl.endDrawing();
     }
 }
