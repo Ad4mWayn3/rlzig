@@ -219,10 +219,12 @@ pub const Player = struct {
 
 pub fn EnumMap(EnumKey: type, Value: type) type {
     return struct {
-    pub const count = @typeInfo(EnumKey).@"enum".fields.len;
     const Self = @This();
+    pub const count = @typeInfo(EnumKey).@"enum".fields.len;
     pub const Pair = struct {EnumKey, Value};
+
     values: [count]Value,
+
     pub fn new(pairs: *const [count]Pair) Self {
         var self: Self = undefined;
         inline for (pairs) |pair| {
@@ -231,14 +233,83 @@ pub fn EnumMap(EnumKey: type, Value: type) type {
         }
         return self;
     }
+
     pub fn at(self: *Self, key: EnumKey) Value {
         return self.values[@intFromEnum(key)];
     }
+
     pub fn @"&"(self: *Self, key: EnumKey) *Value {
         return &self.values[@intFromEnum(key)];
     }
     };
 }
+
+pub const BlobArchive = struct {
+    buffer: []const u8,
+    offset_table: []align(1) const usize,
+
+    /// Parses a contiguous buffer as a blob archive and extracts the table
+    /// of offsets. Uses the first `@sizeOf(usize)` bytes as the length of
+    /// the offset table and assumes the contents start immediately after.
+    pub fn parseOffsetTable(buffer: []const u8) []align(1) const usize {
+        // where the offset table begins
+        const table_offset: usize = @sizeOf(usize);
+        const table_len = std.mem.bytesAsValue(usize, buffer[0..table_offset]).*;
+        // pointer to the raw data of the table
+        const table_ptr: [*]const u8 = buffer.ptr + table_offset;
+        return @as([*]const align(1) usize, @ptrCast(table_ptr))[0..table_len];
+    }
+
+    /// Constructs the blob archive as specified by the buffer. Assumes the first
+    /// `@sizeOf(usize)` bytes are the length of the `offset_table: []const usize`,
+    /// which is assumed to be placed immediately after.
+    pub fn initBuffer(buffer: []const u8) @This() {
+        return .{
+            .buffer = buffer,
+            .offset_table = @call(.always_inline, parseOffsetTable, .{buffer}),
+        };
+    }
+
+    pub fn getBlob(this: @This(), i: usize) []const u8 {
+        std.debug.assert(i < this.offset_table.len);
+        const end = if (i+1 == this.offset_table.len) this.buffer.len
+            else this.offset_table[i+1];
+        return this.buffer[this.offset_table[i]..end];
+    }
+
+    pub fn initBlobs(allocator: std.mem.Allocator, blobs: []const []const u8
+    ) std.mem.Allocator.Error!@This() {
+        // compute the total size of the archive
+        const table_start = @sizeOf(usize);
+        const data_offset = table_start + blobs.len * @sizeOf(usize);
+        var size: usize = data_offset;
+        for (blobs) |blob| size += blob.len;
+
+        var res = try allocator.alignedAlloc(u8, .fromByteUnits(@alignOf(usize)), size);
+
+        std.mem.bytesAsValue(usize, res.ptr).* = size;
+        //std.debug.assert(std.mem.bytesAsValue(usize, &res).& == size);
+        var offset_table = @as([*]usize, @ptrCast(@alignCast(res.ptr + table_start)))[0..blobs.len];
+        std.debug.assert(@intFromPtr(offset_table.ptr) < @intFromPtr(res.ptr + res.len));
+
+        // pack each blob into the `res` buffer
+        var offset = data_offset;
+        for (blobs, 0..) |blob, i| {
+            offset_table[i] = offset;
+            @memcpy(res[offset..][0..blob.len], blob);
+            offset += blob.len;
+        }
+
+        return .{
+            .buffer = res,
+            .offset_table = offset_table,
+        };
+    }
+
+    pub fn deinit(this: @This(), allocator: std.mem.Allocator) void {
+        allocator.free(this.buffer);
+    }
+};
 
 /// Minimum translation vector. Smallest trajectory `rec` should travel to
 /// "meet" `v`. Assumes `v` is outside of `rec`
@@ -393,6 +464,20 @@ pub fn loadFileStatic(path: []const u8, buf: []u8, nullTerminator: bool) !void {
     }
 }
 
+pub inline fn sliceCast(Target: type, slice: anytype) []Target {
+    const Source = comptime blk: {
+        const Slice = @TypeOf(slice);
+        const info = @typeInfo(Slice);
+        if (info.pointer.size != .slice) @compileError(@typeName(Slice)
+            ++ " is not a slice type\n");
+        break :blk info.pointer.child;
+    };
+
+    std.debug.assert((slice.len * @sizeOf(Source)) % @sizeOf(Target) == 0);
+    const len = (slice.len * @sizeOf(Source)) / @sizeOf(Target);
+    return @as([*]Target, @ptrCast(@alignCast(slice.ptr)))[0..len];
+}
+
 /// Returns a heap-allocated buffer with the contents of the file. Delegates
 /// deallocation responsibility to the caller
 pub fn loadFileDynamic(gpa: std.mem.Allocator, path: []const u8,
@@ -414,12 +499,7 @@ pub fn loadFileDynamic(gpa: std.mem.Allocator, path: []const u8,
 pub fn saveRectsToFile(path: []const u8, recs: []rl.Rectangle) !void {
     const file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
-    const stride: usize = @sizeOf([4]f32);
-    comptime std.debug.assert(@sizeOf(rl.Rectangle) == stride);
-    for (recs) |rec| {
-        const a: [stride]u8 = @bitCast(rec);
-        _ = try file.write(&a);
-    }
+    _ = try file.write(@as([*]u8, @ptrCast(recs.ptr))[0..recs.len*@sizeOf(rl.Rectangle)]);
 }
 
 pub fn loadRectsFromFile(path: []const u8, gpa: std.mem.Allocator,

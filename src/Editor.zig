@@ -99,15 +99,30 @@ pub fn update(self: *Self, delta: Seconds) !void {
         self.mode = .edit;
     }
     if (rgui.button(.{ .x = 40, .y = 40 + 80*2,
-    .width = 200, .height = 60 }, "save"))
+        .width = 200, .height = 60 }, "save")
+    ) {
         try root.saveRectsToFile("map.bin", self.map.items);
+        const map_archive_file = try std.fs.cwd().createFile("map_archive.bin", .{});
+        const map_archive = try root.BlobArchive.initBlobs(self.gpa, &.{
+            std.mem.sliceAsBytes(self.map.items),
+            std.mem.sliceAsBytes(self.materials.items)});
+        _ = try map_archive_file.write(map_archive.buffer);
+        map_archive_file.close();
+        map_archive.deinit(self.gpa);
+    }
     
     _ = rgui.checkBox(.init(40, 40+80*3, 30,30), "grid mode", &self.grid_mode);
     
     if (rgui.button(.{ .x = 40, .y = 40 + 80*6, .width = 200,
     .height = 60 }, "load")) {
         self.map.shrinkAndFree(self.gpa, 0);
-        try root.loadRectsFromFile("map.bin", self.gpa, &self.map);
+        //try root.loadRectsFromFile("map.bin", self.gpa, &self.map);
+        const buffer = try root.loadFileDynamic(self.gpa, "map_archive.bin", false);
+        defer self.gpa.free(buffer);
+        const map_archive = root.BlobArchive.initBuffer(buffer);
+        const map = root.sliceCast(rl.Rectangle, @constCast(map_archive.getBlob(0)));
+        try self.map.resize(self.gpa, map.len);
+        @memcpy(self.map.items, map);
         self.selected.unsetAll();
         try self.selected.resize(self.gpa, self.map.items.len, false);
     }
@@ -251,6 +266,9 @@ fn handleEditInput(self: *Self) !void {
             self.selected.unset(i);
         };
         self.map.orderedRemoveMany(indexes.items);
+
+        // for some reason, this line is causing an assertion failure
+        //self.materials.orderedRemoveMany(indexes.items);
         const newlen = @as(i64, @intCast(bitLen))
             - @as(i64,@intCast(indexes.items.len));
         if (newlen < 0) unreachable;
