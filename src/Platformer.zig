@@ -108,12 +108,12 @@ fn increaseHoldTime(self: *Self, input: InputName, time: Seconds) void {
 
 pub fn update(self: *Self, delta: Seconds) !void {
     if (rgui.button(.{ .x = 30, .y = 400, .width = 300, .height = 50 }, "Update physics parameters")) {
-        const buf = try rlzig.loadFileDynamic(self.gpa, "physics.zon", true);
+        const buf = try rlzig.loadFileDynamic(self.gpa, "physics.zon", true, null);
         defer self.gpa.free(buf);
         physics = try std.zon.parse.fromSlice(Physics, self.gpa, buf[0..buf.len-1 :0], null, .{});
     }
-
-    // if (inputMap.is(.down, .zoom)) self.camera.zoom += delta;
+ 
+    // if (inputMap.is(.down, .zoom)) self.camera.zoom += delta
     // if (inputMap.is(.down, .pan)) self.camera.zoom -= delta;
 
     var hmove = true;

@@ -7,7 +7,7 @@ const rgui = @import("raygui");
 const Seconds = f32;
 const Self = @This();
 const kInputs = [_]rl.KeyboardKey{ .e, .s, .d, .f };
-const tileSizes = [_]f32{64,32,16,8};
+const tileSizes = [_]f32{ 64, 32, 16, 8 };
 
 const Material = enum {
     normal,
@@ -39,11 +39,13 @@ mode: enum {
     scroll,
     build,
     edit,
-    fn name(self: @This()) []const u8 { return switch (self) {
-        .scroll => "scroll",
-        .build => "build",
-        .edit => "edit",
-    };}
+    fn name(self: @This()) []const u8 {
+        return switch (self) {
+            .scroll => "scroll",
+            .build => "build",
+            .edit => "edit",
+        };
+    }
 },
 
 pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
@@ -51,14 +53,24 @@ pub fn init(self: *Self, gpa: std.mem.Allocator) !void {
     self.grid_mode = false;
     self.grid = try .initSquare(tileSizes[2], .zero());
     self.map = try .initCapacity(gpa, 0x40);
+    self.materials = try .initCapacity(gpa, 0x40);
     self.mode = .scroll;
     self.camera = .{ .offset = .{ .x = 0, .y = 0 }, .rotation = 0, .target = .{ .x = 0, .y = 0 }, .zoom = 1 };
 
-    try root.loadRectsFromFile("map.bin", gpa, &self.map);
+    //try root.loadRectsFromFile("map.bin", gpa, &self.map);
+    const map_buffer = try root.loadFileDynamic(gpa, "map_archive.bin", false, u64);
+    defer gpa.free(map_buffer);
+    const map_archive: root.BlobArchive = .initBuffer(map_buffer);
+    const map_props = root.sliceCast(rl.Rectangle, @constCast(map_archive.getBlob(0)));
+    const map_materials = @as([]align(1) const Material, @ptrCast(map_archive.getBlob(1)));
+
+    try self.map.resize(gpa, map_props.len);
+    @memcpy(self.map.items, map_props);
+    try self.materials.resize(gpa, map_props.len);
+    @memcpy(self.materials.items, map_materials);
     self.selected = try .initEmpty(gpa, self.map.items.len);
-    self.materials = .empty; // this line can probably be commented out
-    try self.materials.resize(gpa, self.map.items.len);
-    @memset(self.materials.items, .normal);
+    //try self.materials.resize(gpa, self.map.items.len);
+    //@memset(self.materials.items, .normal);
 }
 
 pub fn deinit(self: *Self) void {
@@ -75,54 +87,53 @@ pub fn update(self: *Self, delta: Seconds) !void {
     }
 
     switch (self.mode) {
-    .build => try self.handleBuildInput(),
-    .edit => try self.handleEditInput(),
-    else => {},
+        .build => try self.handleBuildInput(),
+        .edit => try self.handleEditInput(),
+        else => {},
     }
 
     inline for (@typeInfo(Material).@"enum".fields, 0..) |field, i| {
-        if (rgui.button(.{
-            .x = 40 + 250*i, .y = root.screenV().y - 90.0,
-            .width = 220, .height = 60 }, field.name)
-        ) {
+        if (rgui.button(.{ .x = 40 + 250 * i, .y = root.screenV().y - 90.0, .width = 220, .height = 60 }, field.name)) {
             self.box_material = @enumFromInt(field.value);
             break;
         }
     }
 
-    if (rgui.button(.{ .x = 40, .y = 40, .width = 200, .height = 60 },
-    "build")) {
+    if (rgui.button(.{ .x = 40, .y = 40, .width = 200, .height = 60 }, "build")) {
         self.mode = .build;
     }
-    if (rgui.button(.{ .x = 40, .y = 40 + 80, .width = 200,
-    .height = 60 }, "edit")) {
+    if (rgui.button(.{ .x = 40, .y = 40 + 80, .width = 200, .height = 60 }, "edit")) {
         self.mode = .edit;
     }
-    if (rgui.button(.{ .x = 40, .y = 40 + 80*2,
-        .width = 200, .height = 60 }, "save")
-    ) {
+    if (rgui.button(.{ .x = 40, .y = 40 + 80 * 2, .width = 200, .height = 60 }, "save")) {
         try root.saveRectsToFile("map.bin", self.map.items);
         const map_archive_file = try std.fs.cwd().createFile("map_archive.bin", .{});
-        const map_archive = try root.BlobArchive.initBlobs(self.gpa, &.{
-            std.mem.sliceAsBytes(self.map.items),
-            std.mem.sliceAsBytes(self.materials.items)});
+        const map_archive = try root.BlobArchive.initBlobs(self.gpa, &.{ std.mem.sliceAsBytes(self.map.items), std.mem.sliceAsBytes(self.materials.items) });
         _ = try map_archive_file.write(map_archive.buffer);
         map_archive_file.close();
         map_archive.deinit(self.gpa);
     }
-    
-    _ = rgui.checkBox(.init(40, 40+80*3, 30,30), "grid mode", &self.grid_mode);
-    
-    if (rgui.button(.{ .x = 40, .y = 40 + 80*6, .width = 200,
-    .height = 60 }, "load")) {
+
+    _ = rgui.checkBox(.init(40, 40 + 80 * 3, 30, 30), "grid mode", &self.grid_mode);
+
+    if (rgui.button(.{ .x = 40, .y = 40 + 80 * 6, .width = 200, .height = 60 }, "load")) {
         self.map.shrinkAndFree(self.gpa, 0);
         //try root.loadRectsFromFile("map.bin", self.gpa, &self.map);
-        const buffer = try root.loadFileDynamic(self.gpa, "map_archive.bin", false);
+        const buffer = try root.loadFileDynamic(self.gpa, "map_archive.bin", false, u64);
         defer self.gpa.free(buffer);
+
         const map_archive = root.BlobArchive.initBuffer(buffer);
+        std.debug.print("offset table len: {d}\n", .{map_archive.offset_table.len});
         const map = root.sliceCast(rl.Rectangle, @constCast(map_archive.getBlob(0)));
+        const materials = @as([]align(1) const Material, @ptrCast(map_archive.getBlob(1)));
+        //defer self.gpa.free(map);
+        //defer self.gpa.free(materials);
+
         try self.map.resize(self.gpa, map.len);
+        try self.materials.resize(self.gpa, materials.len);
         @memcpy(self.map.items, map);
+        @memcpy(self.materials.items, materials);
+
         self.selected.unsetAll();
         try self.selected.resize(self.gpa, self.map.items.len, false);
     }
@@ -131,9 +142,9 @@ pub fn update(self: *Self, delta: Seconds) !void {
 pub fn draw(self: Self, player: *Player) !void {
     rl.beginMode2D(self.camera);
     for (self.map.items, 0..) |rec, i| {
-        rl.drawRectangleRec(rec,
-            Material.color_map.get(self.materials.items[i]).?);
+        rl.drawRectangleRec(rec, Material.color_map.get(self.materials.items[i]).?);
     }
+
     for (self.map.items) |rec| {
         // rl.drawRectangleRec(rec, .blue);
         rl.drawCircleV(.init(rec.x, rec.y), 1.2, .red);
@@ -152,21 +163,16 @@ pub fn draw(self: Self, player: *Player) !void {
     rl.drawRectangleLinesEx(root.rectangleTipTail(self.selector_tip, self.selector_tail), 2.5, .white);
 
     const box = root.rectangleTipTail(self.box_tail, self.box_tip);
-    rl.drawRectangleRec(
-        if (self.grid_mode) self.grid.alignAndFitRec(box)
-        else box,
-        .dark_blue);
-    rl.drawRectangleRec(try self.tileAtMouse(), .init(255,255,255,100));
+    rl.drawRectangleRec(if (self.grid_mode) self.grid.alignAndFitRec(box) else box, .dark_blue);
+    rl.drawRectangleRec(try self.tileAtMouse(), .init(255, 255, 255, 100));
 
     if (self.grid_mode) {
         self.grid.draw(root.rectangleV(self.camera.target
-            .add(self.camera.offset.scale(-1)), root.screenV()),
-            .init(255,255,255,90), 1);
+            .add(self.camera.offset.scale(-1)), root.screenV()), .init(255, 255, 255, 90), 1);
     }
     rl.endMode2D();
 
-    _ = rgui.label(.{.x = 20, .y = root.screenV().y - 120.0,
-        .width = root.screenV().x, .height = 120 }, "Block material");
+    _ = rgui.label(.{ .x = 20, .y = root.screenV().y - 120.0, .width = root.screenV().x, .height = 120 }, "Block material");
 
     var buffer = [_]u8{0} ** 0x200;
     {
@@ -205,8 +211,7 @@ fn handleBuildInput(self: *Self) !void {
     } else if (rl.isMouseButtonDown(.left)) {
         self.box_tail = mousePos;
     } else if (rl.isMouseButtonReleased(.left) and self.box_tail.equals(self.box_tip) == 0) {
-        try self.map.append(self.gpa, self.grid.alignAndFitRec(
-            root.rectangleTipTail(self.box_tip, self.box_tail)));
+        try self.map.append(self.gpa, self.grid.alignAndFitRec(root.rectangleTipTail(self.box_tip, self.box_tail)));
         try self.materials.append(self.gpa, self.box_material);
         try self.selected.resize(self.gpa, self.map.items.len, false);
     } else {
@@ -218,9 +223,6 @@ fn handleEditInput(self: *Self) !void {
     const mousePos: rl.Vector2 =
         rl.getMousePosition().add(self.camera.target);
     const mouseDelta = rl.getMouseDelta();
-
-    const tile = try self.tileAtMouse();
-    _ = tile; // autofix
 
     if (rl.isMouseButtonPressed(.left)) l1: {
         if (rl.isKeyDown(.z)) break :l1;
@@ -238,8 +240,7 @@ fn handleEditInput(self: *Self) !void {
         self.selector_tail = mousePos;
         if (mouseDelta.lengthSqr() == 0.0) break :l1;
         for (self.map.items, 0..) |rec, i| {
-            if (rl.checkCollisionRecs(root.rectangleTipTail(self.selector_tip,
-            self.selector_tail), rec)) {
+            if (rl.checkCollisionRecs(root.rectangleTipTail(self.selector_tip, self.selector_tail), rec)) {
                 self.selected.set(i);
             } else if (!rl.isKeyDown(.left_shift))
                 self.selected.unset(i);
@@ -254,10 +255,9 @@ fn handleEditInput(self: *Self) !void {
     if (rl.isKeyPressed(.g)) {
         for (0..bitLen) |i| if (self.selected.isSet(i)) {
             self.map.items[i] = self.grid.alignRec(self.map.items[i]);
-        } ;
+        };
     }
 
-    
     if (rl.isKeyPressed(.delete)) {
         var indexes = try std.ArrayList(usize).initCapacity(self.gpa, self.map.items.len);
         defer indexes.deinit(self.gpa);
@@ -268,11 +268,10 @@ fn handleEditInput(self: *Self) !void {
         self.map.orderedRemoveMany(indexes.items);
 
         // for some reason, this line is causing an assertion failure
-        //self.materials.orderedRemoveMany(indexes.items);
-        const newlen = @as(i64, @intCast(bitLen))
-            - @as(i64,@intCast(indexes.items.len));
+        self.materials.orderedRemoveMany(indexes.items);
+        const newlen = @as(i64, @intCast(bitLen)) - @as(i64, @intCast(indexes.items.len));
         if (newlen < 0) unreachable;
-        try self.selected.resize(self.gpa, @as(usize,@intCast(newlen)), false);
+        try self.selected.resize(self.gpa, @as(usize, @intCast(newlen)), false);
     } else if (rl.isMouseButtonDown(.middle)) {
         for (0..bitLen) |i| l: {
             if (!self.selected.isSet(i)) break :l;
@@ -285,8 +284,7 @@ fn handleEditInput(self: *Self) !void {
         try self.selected.resize(self.gpa, bitLen + count, true);
         for (0..bitLen) |i| {
             if (!self.selected.isSet(i)) continue;
-            try self.map.append(self.gpa, root.translate(rl.Rectangle,
-                .{.x = 10, .y = 10}, self.map.items[i]));
+            try self.map.append(self.gpa, root.translate(rl.Rectangle, .{ .x = 10, .y = 10 }, self.map.items[i]));
             self.selected.unset(i);
         }
     }

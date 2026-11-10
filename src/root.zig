@@ -245,32 +245,32 @@ pub fn EnumMap(EnumKey: type, Value: type) type {
 }
 
 pub const BlobArchive = struct {
-    buffer: []const u8,
-    offset_table: []align(1) const usize,
+    buffer: []align(@alignOf(u64)) const u8,
+    offset_table: []const u64,
 
     /// Parses a contiguous buffer as a blob archive and extracts the table
     /// of offsets. Uses the first `@sizeOf(usize)` bytes as the length of
     /// the offset table and assumes the contents start immediately after.
-    pub fn parseOffsetTable(buffer: []const u8) []align(1) const usize {
+    pub fn parseOffsetTable(buffer: []const u8) []align(1) const u64 {
         // where the offset table begins
-        const table_offset: usize = @sizeOf(usize);
-        const table_len = std.mem.bytesAsValue(usize, buffer[0..table_offset]).*;
+        const table_offset: u64 = @sizeOf(u64);
+        const table_len = std.mem.bytesAsValue(u64, buffer[0..table_offset]).*;
         // pointer to the raw data of the table
         const table_ptr: [*]const u8 = buffer.ptr + table_offset;
-        return @as([*]const align(1) usize, @ptrCast(table_ptr))[0..table_len];
+        return @as([*]const align(1) u64, @ptrCast(table_ptr))[0..table_len];
     }
 
     /// Constructs the blob archive as specified by the buffer. Assumes the first
     /// `@sizeOf(usize)` bytes are the length of the `offset_table: []const usize`,
     /// which is assumed to be placed immediately after.
-    pub fn initBuffer(buffer: []const u8) @This() {
+    pub fn initBuffer(buffer: []align(@alignOf(u64)) const u8) @This() {
         return .{
             .buffer = buffer,
-            .offset_table = @call(.always_inline, parseOffsetTable, .{buffer}),
+            .offset_table = @alignCast(@call(.always_inline, parseOffsetTable, .{buffer})),
         };
     }
 
-    pub fn getBlob(this: @This(), i: usize) []const u8 {
+    pub fn getBlob(this: @This(), i: u64) []const u8 {
         std.debug.assert(i < this.offset_table.len);
         const end = if (i+1 == this.offset_table.len) this.buffer.len
             else this.offset_table[i+1];
@@ -281,15 +281,15 @@ pub const BlobArchive = struct {
     ) std.mem.Allocator.Error!@This() {
         // compute the total size of the archive
         const table_start = @sizeOf(usize);
-        const data_offset = table_start + blobs.len * @sizeOf(usize);
+        const data_offset = table_start + blobs.len * @sizeOf(u64);
         var size: usize = data_offset;
         for (blobs) |blob| size += blob.len;
 
-        var res = try allocator.alignedAlloc(u8, .fromByteUnits(@alignOf(usize)), size);
+        var res = try allocator.alignedAlloc(u8, .of(u64), size);
 
-        std.mem.bytesAsValue(usize, res.ptr).* = size;
+        std.mem.bytesAsValue(usize, res.ptr).* = blobs.len;
         //std.debug.assert(std.mem.bytesAsValue(usize, &res).& == size);
-        var offset_table = @as([*]usize, @ptrCast(@alignCast(res.ptr + table_start)))[0..blobs.len];
+        var offset_table = @as([*]u64, @ptrCast(@alignCast(res.ptr + table_start)))[0..blobs.len];
         std.debug.assert(@intFromPtr(offset_table.ptr) < @intFromPtr(res.ptr + res.len));
 
         // pack each blob into the `res` buffer
@@ -310,6 +310,29 @@ pub const BlobArchive = struct {
         allocator.free(this.buffer);
     }
 };
+
+test BlobArchive {
+        const testing = std.testing;
+        const allocator = testing.allocator;
+
+        const blobs = [3][]const u8{&.{1,3,5,7,9}, &.{0,2,4,6,8}, &.{100,101,102}};
+        const archive = try BlobArchive.initBlobs(allocator, blobs[0..]);
+        defer archive.deinit(allocator);
+        try testing.expectEqual(3, archive.offset_table.len);
+
+        for (0..3) |i|
+            try testing.expectEqualSlices(u8, blobs[i], archive.getBlob(i));
+
+        // const offset_table = BlobArchive.parseOffsetTable(archive.buffer);
+        // for (offset_table, archive.offset_table) |e1, e2|
+        //     try testing.expectEqual(e1,e2);
+}
+
+fn bestAlignment(address_value: usize) usize {
+    var alignment: usize = 1;
+    while (address_value % alignment == 0) alignment *= 2;
+    return alignment;
+}
 
 /// Minimum translation vector. Smallest trajectory `rec` should travel to
 /// "meet" `v`. Assumes `v` is outside of `rec`
@@ -481,13 +504,13 @@ pub inline fn sliceCast(Target: type, slice: anytype) []Target {
 /// Returns a heap-allocated buffer with the contents of the file. Delegates
 /// deallocation responsibility to the caller
 pub fn loadFileDynamic(gpa: std.mem.Allocator, path: []const u8,
-    nullTerminator: bool
-) ![]u8 {
+    nullTerminator: bool, comptime AlignAs: ?type
+) ![]align(if (AlignAs) |T| @alignOf(T) else 1) u8 {
     const file = try std.fs.cwd().openFile(path, .{.mode=.read_only});
     defer file.close();
     const sz = (try file.getEndPos()) + @as(u64,if (nullTerminator) 1 else 0);
     std.debug.print("file size: {d}\n", .{sz});
-    const buf = try gpa.alloc(u8, sz);
+    const buf = try gpa.alignedAlloc(u8, .of(AlignAs orelse u8), sz);
     errdefer gpa.free(buf);
     _ = try file.read(buf);
     if (nullTerminator) {
