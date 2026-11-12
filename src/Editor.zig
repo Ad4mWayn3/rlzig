@@ -16,7 +16,7 @@ const Material = enum {
     sticky,
 
     pub const color_map: std.enums.EnumMap(@This(), rl.Color) = .init(.{
-        .normal = .dark_blue,
+        .normal = .blue,
         .impulse = .violet,
         .bounce = .red,
         .sticky = .lime,
@@ -86,26 +86,32 @@ pub fn update(self: *Self, delta: Seconds) !void {
         self.camera.target = self.camera.target.subtract(rl.getMouseDelta());
     }
 
-    switch (self.mode) {
-        .build => try self.handleBuildInput(),
-        .edit => try self.handleEditInput(),
-        else => {},
-    }
+    var ui_interact = false;
 
     inline for (@typeInfo(Material).@"enum".fields, 0..) |field, i| {
         if (rgui.button(.{ .x = 40 + 250 * i, .y = root.screenV().y - 90.0, .width = 220, .height = 60 }, field.name)) {
+            ui_interact = true;
             self.box_material = @enumFromInt(field.value);
+            if (self.mode == .edit) {
+                var iter = self.selected.iterator(.{});
+                while (iter.next()) |j| {
+                    self.materials.items[j] = @enumFromInt(field.value);
+                }
+            }
             break;
         }
     }
 
     if (rgui.button(.{ .x = 40, .y = 40, .width = 200, .height = 60 }, "build")) {
+        ui_interact = true;
         self.mode = .build;
     }
     if (rgui.button(.{ .x = 40, .y = 40 + 80, .width = 200, .height = 60 }, "edit")) {
+        ui_interact = true;
         self.mode = .edit;
     }
     if (rgui.button(.{ .x = 40, .y = 40 + 80 * 2, .width = 200, .height = 60 }, "save")) {
+        ui_interact = true;
         try root.saveRectsToFile("map.bin", self.map.items);
         const map_archive_file = try std.fs.cwd().createFile("map_archive.bin", .{});
         const map_archive = try root.BlobArchive.initBlobs(self.gpa, &.{ std.mem.sliceAsBytes(self.map.items), std.mem.sliceAsBytes(self.materials.items) });
@@ -114,9 +120,10 @@ pub fn update(self: *Self, delta: Seconds) !void {
         map_archive.deinit(self.gpa);
     }
 
-    _ = rgui.checkBox(.init(40, 40 + 80 * 3, 30, 30), "grid mode", &self.grid_mode);
+    ui_interact = rgui.checkBox(.init(40, 40 + 80 * 3, 30, 30), "grid mode", &self.grid_mode) or ui_interact;
 
     if (rgui.button(.{ .x = 40, .y = 40 + 80 * 6, .width = 200, .height = 60 }, "load")) {
+        ui_interact = true;
         self.map.shrinkAndFree(self.gpa, 0);
         //try root.loadRectsFromFile("map.bin", self.gpa, &self.map);
         const buffer = try root.loadFileDynamic(self.gpa, "map_archive.bin", false, u64);
@@ -137,6 +144,12 @@ pub fn update(self: *Self, delta: Seconds) !void {
         self.selected.unsetAll();
         try self.selected.resize(self.gpa, self.map.items.len, false);
     }
+
+    if (!ui_interact) switch (self.mode) {
+        .build => try self.handleBuildInput(),
+        .edit => try self.handleEditInput(),
+        else => {},
+    };
 }
 
 pub fn draw(self: Self, player: *Player) !void {
